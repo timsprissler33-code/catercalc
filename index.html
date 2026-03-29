@@ -647,38 +647,41 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
 
 <!-- Sync Setup Modal -->
 <div class="mo" id="sync-modal">
-  <div class="modal" style="width:600px">
+  <div class="modal" style="width:560px">
     <div class="modal-title">☁ Cloud Sync – Supabase</div>
-    <div class="modal-sub">Trage deine Supabase-Zugangsdaten ein. Einmalig – danach läuft alles automatisch.</div>
+    <div class="modal-sub">Daten werden automatisch mit Supabase synchronisiert.</div>
 
-    <div style="background:var(--blight);border:1px solid var(--bmid);border-radius:var(--r);padding:13px 15px;margin-bottom:16px;font-size:12px;line-height:1.9;color:var(--t2)">
-      <strong style="color:var(--blue)">Noch kein Supabase-Konto?</strong> Kostenlos anlegen auf
-      <a href="https://supabase.com" target="_blank" style="color:var(--blue);text-decoration:underline">supabase.com</a>
-      – kein Hosting nötig, läuft komplett in der Cloud.
+    <!-- Status card -->
+    <div style="background:var(--glight);border:1px solid #bbf7d0;border-radius:var(--r);padding:13px 15px;margin-bottom:16px;font-size:12px;line-height:1.8;color:var(--green)">
+      <strong>✅ Verbunden mit:</strong> naakcmagdkblhfwawlrf.supabase.co<br>
+      <span style="color:var(--t3)">Alle Änderungen werden automatisch in Echtzeit gespeichert.</span>
     </div>
 
-    <div class="fg">
-      <div class="fgrp full">
-        <label>Supabase URL *</label>
-        <input type="text" id="sb-url" placeholder="https://xxxxxxxxxxxx.supabase.co"/>
-      </div>
-      <div class="fgrp full">
-        <label>Supabase Anon Key *</label>
-        <input type="text" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIs…"/>
-        <div style="font-size:11px;color:var(--t4);margin-top:3px">Aus Supabase → Project Settings → API → Project API Keys → anon public</div>
-      </div>
-    </div>
+    <div id="sb-status" style="display:none;margin-top:0;margin-bottom:12px;padding:10px 12px;border-radius:var(--r);font-size:12px"></div>
 
-    <div id="sb-status" style="display:none;margin-top:12px;padding:10px 12px;border-radius:var(--r);font-size:12px"></div>
+    <!-- Hidden inputs still needed for sbTest/sbSaveConfig functions -->
+    <input type="hidden" id="sb-url" value="https://naakcmagdkblhfwawlrf.supabase.co"/>
+    <input type="hidden" id="sb-key" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hYWtjbWFnZGtibGhmd2F3bHJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDY2NTAsImV4cCI6MjA5MDI4MjY1MH0.hR8hpOcfwYb6lfFGz1RKN1_E-rWcOVXPAjAYar4Id5M"/>
 
-    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="sbTest()">🔗 Verbindung testen</button>
-      <button class="btn btn-primary btn-sm" onclick="sbMigrate()" id="sb-migrate-btn" style="display:none">🚀 Lokale Daten migrieren</button>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="border:1px solid var(--border);border-radius:var(--r);padding:14px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">🔄 Manueller Sync</div>
+        <div style="font-size:11px;color:var(--t4);margin-bottom:10px">Normalerweise nicht nötig – passiert automatisch bei jeder Änderung.</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="sbTest()">🔗 Verbindung testen</button>
+          <button class="btn btn-primary btn-sm" onclick="sbUpload().then(()=>sbShowStatus('success','✅ Hochgeladen!'))">⬆ Jetzt hochladen</button>
+          <button class="btn btn-ghost btn-sm" onclick="sbDownload().then(r=>{if(r){applyRemote(r.data);save();renderDashboard();sbShowStatus('success','✅ Heruntergeladen!');}})">⬇ Jetzt laden</button>
+        </div>
+      </div>
+      <div style="border:1px solid #bbf7d0;border-radius:var(--r);padding:14px;background:var(--glight)">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--green)">🚀 Lokale Daten migrieren</div>
+        <div style="font-size:11px;color:var(--green);margin-bottom:10px">Falls du bereits Daten lokal gespeichert hast – einmalig in die Cloud übertragen.</div>
+        <button class="btn btn-sm" id="sb-migrate-btn" style="background:var(--green);color:#fff" onclick="sbMigrate()">Lokale Daten jetzt hochladen</button>
+      </div>
     </div>
 
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeMo('sync-modal')">Schließen</button>
-      <button class="btn btn-primary" onclick="sbSaveConfig()">Speichern &amp; verbinden</button>
     </div>
   </div>
 </div>
@@ -1737,11 +1740,25 @@ ${content}
 // ================================================================
 //  SUPABASE CLOUD SYNC
 // ================================================================
+// ---- Fest hinterlegte Zugangsdaten ----
+const SB_URL     = 'https://naakcmagdkblhfwawlrf.supabase.co';
+const SB_KEY     = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hYWtjbWFnZGtibGhmd2F3bHJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDY2NTAsImV4cCI6MjA5MDI4MjY1MH0.hR8hpOcfwYb6lfFGz1RKN1_E-rWcOVXPAjAYar4Id5M';
+// ---------------------------------------
 const SB_CFG_KEY = 'catercalc_sb';
 const SB_TABLE   = 'catercalc_data';
 const SB_ROW_ID  = 'main';
 
-function sbGetCfg(){ try{ return JSON.parse(localStorage.getItem(SB_CFG_KEY)||'{}'); }catch(e){ return {}; } }
+// Always return the hardcoded credentials — modal inputs are optional overrides
+function sbGetCfg(){
+  try{
+    const stored = JSON.parse(localStorage.getItem(SB_CFG_KEY)||'{}');
+    return {
+      url:  stored.url  || SB_URL,
+      key:  stored.key  || SB_KEY,
+      lastSync: stored.lastSync || null
+    };
+  }catch(e){ return { url: SB_URL, key: SB_KEY, lastSync: null }; }
+}
 function sbSaveCfg(c){ localStorage.setItem(SB_CFG_KEY, JSON.stringify(c)); }
 
 function sbShowStatus(type, msg){
@@ -1765,15 +1782,14 @@ function setSyncIndicator(state){ // 'ok' | 'syncing' | 'error' | 'off'
 }
 
 function openSyncModal(){
-  const cfg = sbGetCfg();
   const urlEl = document.getElementById('sb-url');
   const keyEl = document.getElementById('sb-key');
-  if(urlEl) urlEl.value = cfg.url||'';
-  if(keyEl) keyEl.value = cfg.key||'';
+  if(urlEl) urlEl.value = SB_URL;
+  if(keyEl) keyEl.value = SB_KEY;
   const statusEl = document.getElementById('sb-status');
   if(statusEl) statusEl.style.display='none';
   const migrateBtn = document.getElementById('sb-migrate-btn');
-  if(migrateBtn) migrateBtn.style.display = (cfg.url&&cfg.key) ? 'inline-flex' : 'none';
+  if(migrateBtn) migrateBtn.style.display = 'inline-flex'; // always show since always configured
   openMo('sync-modal');
 }
 
@@ -1878,17 +1894,26 @@ async function sbMigrate(){
   else { sbShowStatus('error','❌ Fehler beim Hochladen. Verbindung prüfen.'); }
 }
 
-// Called after every saveAndSync() to push to cloud
+// Called after every data change - saves locally AND pushes to cloud
 async function saveAndSync(){
   save(); // always save locally first
-  const cfg = sbGetCfg();
-  if(cfg.url && cfg.key){ sbUpload(); } // fire-and-forget cloud push
+  sbUpload(); // fire-and-forget cloud push (credentials always available)
+}
+
+// Apply downloaded remote data to D
+function applyRemote(remote){
+  D.events    = remote.events    || [];
+  D.fixkosten = remote.fixkosten || [];
+  D.assets    = remote.assets    || [];
+  D.fahrten   = remote.fahrten   || [];
+  D.settings  = remote.settings  || {};
+  if(D.settings.showPersonal===undefined) D.settings.showPersonal=true;
+  D.events.forEach(ev=>{ if(!ev.km)ev.km=[]; if(!ev.expenses)ev.expenses=[]; if(!ev.incomes)ev.incomes=[]; });
 }
 
 // Auto-load from cloud on startup
 async function autoLoadFromCloud(){
-  const cfg = sbGetCfg();
-  if(!cfg.url||!cfg.key){ return; } // not configured
+  const cfg = sbGetCfg(); // always has credentials (hardcoded)
   setSyncIndicator('syncing');
   try{
     const result = await sbDownload();
@@ -1898,13 +1923,7 @@ async function autoLoadFromCloud(){
     const localTime  = cfg.lastSync ? new Date(cfg.lastSync) : new Date(0);
     if(remoteTime > localTime){
       // Remote is newer – load it silently (no confirm needed, remote is source of truth)
-      D.events    = remote.events    || [];
-      D.fixkosten = remote.fixkosten || [];
-      D.assets    = remote.assets    || [];
-      D.fahrten   = remote.fahrten   || [];
-      D.settings  = remote.settings  || {};
-      if(D.settings.showPersonal===undefined) D.settings.showPersonal=true;
-      D.events.forEach(ev=>{ if(!ev.km)ev.km=[]; if(!ev.expenses)ev.expenses=[]; if(!ev.incomes)ev.incomes=[]; });
+      applyRemote(remote);
       save();
       sbSaveCfg({...cfg, lastSync: result.updatedAt});
       setSyncIndicator('ok');
