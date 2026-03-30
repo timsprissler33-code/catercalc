@@ -12,7 +12,32 @@
 body{background:var(--bg);color:var(--text);font-family:'Sora',sans-serif;font-size:14px;min-height:100vh}
 .app{display:flex;min-height:100vh}
 /* SIDEBAR */
-.sidebar{width:240px;background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+.sidebar{width:240px;background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.sidebar.collapsed{transform:translateX(-240px)}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;backdrop-filter:blur(2px)}
+.sidebar-overlay.visible{display:block}
+.menu-toggle{display:none;position:fixed;top:12px;left:12px;z-index:200;width:40px;height:40px;background:var(--blue);border:none;border-radius:var(--r);cursor:pointer;align-items:center;justify-content:center;box-shadow:var(--s2);transition:all .12s}
+.menu-toggle:hover{background:#1d4ed8}
+.menu-toggle span{display:block;width:18px;height:2px;background:#fff;border-radius:2px;transition:all .25s}
+.menu-toggle span+span{margin-top:4px}
+.menu-toggle.open span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+.menu-toggle.open span:nth-child(2){opacity:0;transform:scaleX(0)}
+.menu-toggle.open span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+@media(max-width:768px){
+  .menu-toggle{display:flex}
+  .sidebar{transform:translateX(-240px)}
+  .sidebar.mobile-open{transform:translateX(0)}
+  .main{margin-left:0!important;padding:16px 14px!important}
+  .page-title{font-size:17px}
+  .twoc{grid-template-columns:1fr!important}
+  .cgrid{grid-template-columns:1fr!important}
+  .sg{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))!important}
+  .stats-grid{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))!important}
+  .ph{flex-direction:column;gap:8px}
+  .ph-actions{flex-wrap:wrap}
+  table{font-size:11px}
+  td,th{padding:7px 8px!important}
+}
 .logo{padding:20px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
 .logo-icon{width:34px;height:34px;background:var(--blue);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;color:#fff;flex-shrink:0}
 .logo-main{font-size:16px;font-weight:700;letter-spacing:-.3px}
@@ -166,7 +191,11 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
 <div class="app">
 
 <!-- SIDEBAR -->
-<aside class="sidebar">
+<button class="menu-toggle" id="menu-toggle" onclick="toggleSidebar()" title="Navigation ein-/ausblenden">
+  <span></span><span></span><span></span>
+</button>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
   <div class="logo">
     <div class="logo-icon">🍽</div>
     <div><div class="logo-main">CaterCalc</div><div class="logo-sub">Buchhaltung</div></div>
@@ -1855,6 +1884,7 @@ async function sbTest(){
 }
 
 async function sbUpload(){
+  // Direct upload (used by manual buttons + migrate) - bypasses debounce
   setSyncIndicator('syncing');
   try{
     const payload = { id: SB_ROW_ID, data: JSON.stringify(D), updated_at: new Date().toISOString() };
@@ -1866,7 +1896,17 @@ async function sbUpload(){
   }catch(e){
     setSyncIndicator('error');
     console.error('Supabase upload error:', e);
-    return false;
+    // One automatic retry
+    try{
+      await new Promise(r=>setTimeout(r,2000));
+      const payload = { id: SB_ROW_ID, data: JSON.stringify(D), updated_at: new Date().toISOString() };
+      await sbFetch('POST', payload);
+      setSyncIndicator('ok');
+      return true;
+    }catch(e2){
+      setSyncIndicator('error');
+      return false;
+    }
   }
 }
 
@@ -1895,10 +1935,51 @@ async function sbMigrate(){
   else { sbShowStatus('error','❌ Fehler beim Hochladen. Verbindung prüfen.'); }
 }
 
-// Called after every data change - saves locally AND pushes to cloud
+// ── Debounced upload: batch rapid changes into one request ──────────────────
+let _syncTimer = null;
+let _syncInFlight = false;
+let _syncPending = false;
+
 async function saveAndSync(){
-  save(); // always save locally first
-  sbUpload(); // fire-and-forget cloud push (credentials always available)
+  save(); // always save locally first (instant, never fails)
+  scheduleUpload();
+}
+
+function scheduleUpload(){
+  // If an upload is already in-flight, mark pending and return
+  if(_syncInFlight){ _syncPending = true; return; }
+  // Debounce: wait 800ms after the last change before uploading
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(executeUpload, 800);
+}
+
+async function executeUpload(attempt){
+  attempt = attempt || 1;
+  if(_syncInFlight){ _syncPending = true; return; }
+  _syncInFlight = true;
+  _syncPending  = false;
+  clearTimeout(_syncTimer);
+  setSyncIndicator('syncing');
+  try{
+    const payload = { id: SB_ROW_ID, data: JSON.stringify(D), updated_at: new Date().toISOString() };
+    await sbFetch('POST', payload);
+    const cfg = sbGetCfg();
+    sbSaveCfg({...cfg, lastSync: new Date().toISOString()});
+    setSyncIndicator('ok');
+    _syncInFlight = false;
+    // If more changes came in while uploading, upload again immediately
+    if(_syncPending) scheduleUpload();
+  }catch(e){
+    _syncInFlight = false;
+    setSyncIndicator('error');
+    console.error('Supabase upload error (attempt '+attempt+'):', e.message);
+    // Retry up to 3 times with exponential backoff
+    if(attempt < 3){
+      const delay = attempt * 2000;
+      console.log('Retrying in '+delay+'ms…');
+      setTimeout(()=>executeUpload(attempt+1), delay);
+    }
+  }
 }
 
 // Apply downloaded remote data to D
@@ -1912,31 +1993,43 @@ function applyRemote(remote){
   D.events.forEach(ev=>{ if(!ev.km)ev.km=[]; if(!ev.expenses)ev.expenses=[]; if(!ev.incomes)ev.incomes=[]; });
 }
 
-// Auto-load from cloud on startup
+// Auto-load from cloud on startup – Supabase is always the source of truth
 async function autoLoadFromCloud(){
-  const cfg = sbGetCfg(); // always has credentials (hardcoded)
   setSyncIndicator('syncing');
   try{
     const result = await sbDownload();
-    if(!result){ setSyncIndicator('off'); return; }
-    const remote = result.data;
+    if(!result){
+      // No data in cloud yet – push local data up
+      console.log('No cloud data found, pushing local data…');
+      await sbUpload();
+      return;
+    }
+    const cfg = sbGetCfg();
+    const remote     = result.data;
     const remoteTime = new Date(result.updatedAt||0);
     const localTime  = cfg.lastSync ? new Date(cfg.lastSync) : new Date(0);
+
     if(remoteTime > localTime){
-      // Remote is newer – load it silently (no confirm needed, remote is source of truth)
+      // Cloud is newer → silently load it (cloud = source of truth)
+      console.log('Cloud data is newer, loading from Supabase…');
       applyRemote(remote);
       save();
       sbSaveCfg({...cfg, lastSync: result.updatedAt});
       setSyncIndicator('ok');
       renderDashboard();
-    } else {
-      // Local is same or newer – push to cloud to keep it in sync
+    } else if(localTime > remoteTime){
+      // Local is newer → push up
+      console.log('Local data is newer, pushing to Supabase…');
       await sbUpload();
+    } else {
+      // In sync
       setSyncIndicator('ok');
     }
   }catch(e){
     setSyncIndicator('error');
     console.warn('Auto-sync failed:', e.message);
+    // Retry once after 3s
+    setTimeout(autoLoadFromCloud, 3000);
   }
 }
 
@@ -2165,6 +2258,37 @@ renderDashboard();
 // Wire up sync button + auto-load from cloud on startup
 document.getElementById('sync-open-btn').addEventListener('click', openSyncModal);
 document.getElementById('backup-btn').addEventListener('click', createBackup);
+
+// ── Mobile sidebar toggle ──────────────────────────────────────────────────
+function toggleSidebar(){
+  const sb  = document.getElementById('sidebar');
+  const ov  = document.getElementById('sidebar-overlay');
+  const btn = document.getElementById('menu-toggle');
+  const isOpen = sb.classList.contains('mobile-open');
+  if(isOpen){ closeSidebar(); }
+  else {
+    sb.classList.add('mobile-open');
+    ov.classList.add('visible');
+    btn.classList.add('open');
+  }
+}
+function closeSidebar(){
+  const sb  = document.getElementById('sidebar');
+  const ov  = document.getElementById('sidebar-overlay');
+  const btn = document.getElementById('menu-toggle');
+  sb.classList.remove('mobile-open');
+  ov.classList.remove('visible');
+  btn.classList.remove('open');
+}
+// Close sidebar on nav-item click (mobile UX)
+document.querySelectorAll('.ni').forEach(n => n.addEventListener('click', ()=>{
+  if(window.innerWidth <= 768) closeSidebar();
+}));
+// Close on resize to desktop
+window.addEventListener('resize', ()=>{
+  if(window.innerWidth > 768) closeSidebar();
+});
+
 autoLoadFromCloud();
 </script>
 </body>
