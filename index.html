@@ -1280,7 +1280,7 @@ function addRcptToExp(evId,idx,input){
 
 // ── Planning fields ──────────────────────────────────────────────────────────
 function savePlanningField(field, value){
-  const ev = D.events.find(e=>e.id===currentEventId);
+  const ev = D.events.find(e=>e.id===curEv);
   if(!ev) return;
   if(!ev.planning) ev.planning = {};
   ev.planning[field] = value;
@@ -1298,7 +1298,7 @@ function loadPlanningFields(ev){
 
 // ── Media upload & display ───────────────────────────────────────────────────
 function addEventMedia(input){
-  const ev = D.events.find(e=>e.id===currentEventId);
+  const ev = D.events.find(e=>e.id===curEv);
   if(!ev) return;
   if(!ev.media) ev.media = [];
   const files = Array.from(input.files);
@@ -1331,7 +1331,7 @@ function handleMediaDrop(event){
   zone.style.background = '';
   zone.style.borderColor = '';
   const files = Array.from(event.dataTransfer.files);
-  const ev = D.events.find(e=>e.id===currentEventId);
+  const ev = D.events.find(e=>e.id===curEv);
   if(!ev) return;
   if(!ev.media) ev.media = [];
   let loaded = 0;
