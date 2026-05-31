@@ -620,6 +620,15 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
         Anzahlung (50%): <strong id="bm-deposit" style="color:var(--t2)">0,00 €</strong>
       </div>
     </div>
+    <!-- Extra line items for offer -->
+    <div style="margin-top:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">
+        Sonderleistungen (optional — erscheinen im Angebot)
+      </div>
+      <div id="offer-extra-rows" style="display:flex;flex-direction:column;gap:5px"></div>
+      <button type="button" onclick="offerAddRow()" style="margin-top:6px;padding:5px 12px;background:var(--bg);border:1px dashed var(--bstrong);border-radius:var(--r);font-size:11px;font-weight:600;color:var(--t3);cursor:pointer;width:100%;transition:all .12s" onmouseover="this.style.background='var(--white)'" onmouseout="this.style.background='var(--bg)'">＋ Sonderleistung hinzufügen</button>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeMo('booking-modal')">Abbrechen</button>
       <button class="btn btn-primary" onclick="saveBooking()">Anfrage speichern</button>
@@ -656,51 +665,43 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
 
 <!-- ===== SCHLUSSRECHNUNG MODAL ===== -->
 <div class="mo" id="final-invoice-modal">
-  <div class="modal" style="width:660px">
+  <div class="modal" style="width:720px;max-height:90vh;overflow-y:auto">
     <div class="modal-title">Schlussrechnung erstellen</div>
-    <div class="modal-sub">Positionen sind vorausgefüllt und bearbeitbar. Anzahlung wird automatisch abgezogen.</div>
+    <div class="modal-sub">Alle Positionen sind frei bearbeitbar — Preise, Mengen und Beschreibungen anpassen, Zeilen hinzufügen.</div>
     <div class="fg" style="grid-template-columns:1fr 1fr">
       <div class="fgrp"><label>Rechnungsnummer</label><input type="text" id="fi-num" placeholder="SR-2026-001"/></div>
       <div class="fgrp"><label>Rechnungsdatum</label><input type="date" id="fi-date"/></div>
     </div>
-    <div style="margin-bottom:14px">
-      <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Leistungen</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <!-- Fahrt row -->
-        <div style="display:grid;grid-template-columns:1fr 80px 90px;gap:8px;align-items:center">
-          <input type="text" id="fi-row1-desc" value="An-/Abfahrt" style="font-size:12px"/>
-          <input type="number" id="fi-row1-qty" placeholder="km" step="1" min="0" oninput="calcFinalInvoice()" style="font-size:12px;text-align:right"/>
-          <div style="font-size:12px;color:var(--t3);padding:0 8px">× 1,00 €/km</div>
-        </div>
-        <!-- Pauschale row -->
-        <div style="display:grid;grid-template-columns:1fr 80px 90px;gap:8px;align-items:center">
-          <input type="text" id="fi-row2-desc" value='Pauschale "Gugel-Catering"' style="font-size:12px"/>
-          <div style="font-size:12px;color:var(--t3);padding:0 8px;text-align:right">1×</div>
-          <div style="font-size:12px;color:var(--t3);padding:0 8px">450,00 €</div>
-        </div>
-        <!-- Buffet row -->
-        <div style="display:grid;grid-template-columns:1fr 80px 90px;gap:8px;align-items:center">
-          <input type="text" id="fi-row3-desc" value="Pizzabuffet pro Person" style="font-size:12px"/>
-          <input type="number" id="fi-row3-qty" placeholder="Pers." step="1" min="0" oninput="calcFinalInvoice()" style="font-size:12px;text-align:right"/>
-          <div style="font-size:12px;color:var(--t3);padding:0 8px">× 20,00 €/P.</div>
-        </div>
+
+    <!-- Dynamic line items -->
+    <div style="margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:2fr 70px 90px 80px 32px;gap:6px;align-items:center;margin-bottom:6px;padding:0 2px">
+        <div style="font-size:10px;font-weight:600;color:var(--t4);text-transform:uppercase;letter-spacing:.8px">Leistung</div>
+        <div style="font-size:10px;font-weight:600;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;text-align:right">Menge</div>
+        <div style="font-size:10px;font-weight:600;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;text-align:right">Stückpreis</div>
+        <div style="font-size:10px;font-weight:600;color:var(--t4);text-transform:uppercase;letter-spacing:.8px;text-align:right">Gesamt</div>
+        <div></div>
       </div>
+      <div id="fi-rows-container" style="display:flex;flex-direction:column;gap:5px"></div>
+      <button type="button" onclick="fiAddRow()" style="margin-top:8px;padding:5px 12px;background:var(--bg);border:1px dashed var(--bstrong);border-radius:var(--r);font-size:11px;font-weight:600;color:var(--t3);cursor:pointer;width:100%;transition:all .12s" onmouseover="this.style.background='var(--white)'" onmouseout="this.style.background='var(--bg)'">＋ Leistung hinzufügen</button>
     </div>
-    <div class="fg" style="grid-template-columns:1fr 1fr">
+
+    <!-- Notes -->
+    <div class="fgrp full" style="margin-bottom:10px">
+      <label>Anmerkungen (erscheinen auf der Rechnung, z.B. Pizzadetails)</label>
+      <textarea id="fi-notes" rows="2" style="width:100%;font-size:12px" placeholder="z.B. Pizza Classic: 20 Stück, Pizza Signature: 15 Stück"></textarea>
+    </div>
+
+    <!-- Deposit + total preview -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
       <div class="fgrp">
         <label>Bereits gezahlte Anzahlung (€)</label>
         <input type="number" id="fi-deposit-paid" step="0.01" oninput="calcFinalInvoice()"/>
       </div>
-      <div style="display:flex;align-items:flex-end;padding-bottom:4px">
-        <div id="fi-preview" style="font-size:12px;width:100%"></div>
-      </div>
+      <div id="fi-preview" style="font-size:12px;padding-top:20px"></div>
     </div>
-    <div class="fgrp full" style="margin-top:4px">
-      <label>Anmerkungen / Pizzadetails (erscheinen auf der Rechnung)</label>
-      <textarea id="fi-notes" rows="3" style="width:100%;font-size:12px" placeholder="z.B. Pizza Classic: 20 Stück, Pizza Signature: 15 Stück, Pizza Veggie: 10 Stück"></textarea>
-    </div>
-    <!-- Hidden total for compatibility -->
     <input type="hidden" id="fi-total"/>
+
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeMo('final-invoice-modal')">Abbrechen</button>
       <button class="btn btn-primary" onclick="exportFinalInvoicePDF()">📄 Als PDF exportieren</button>
@@ -2055,8 +2056,12 @@ function calcBookingPrice(){
   const deposit=Math.round(total*0.5*100)/100;
   const bpp=document.getElementById('bm-pp'); if(bpp) bpp.textContent=eur(pp);
   const bkm=document.getElementById('bm-km-price'); if(bkm) bkm.textContent=eur(kmCost);
-  const bt=document.getElementById('bm-total'); if(bt) bt.textContent=eur(total);
-  const bd=document.getElementById('bm-deposit'); if(bd) bd.textContent=eur(deposit);
+  // Include extra rows in displayed total
+  const extraTotal=(typeof offerGetExtraRows==='function'?offerGetExtraRows():[]).reduce(function(s,r){return s+r.total;},0);
+  const displayTotal=total+extraTotal;
+  const displayDeposit=Math.round(displayTotal*0.5*100)/100;
+  const bt=document.getElementById('bm-total'); if(bt) bt.textContent=eur(displayTotal);
+  const bd=document.getElementById('bm-deposit'); if(bd) bd.textContent=eur(displayDeposit);
   return {pp,kmCost,total,deposit,guests,km};
 }
 
@@ -2085,9 +2090,53 @@ function openBookingModal(editId){
     document.getElementById('bm-time').value='12:00';
     document.getElementById('bm-guests').value='';
     document.getElementById('bm-km').value='';
+    // Clear extra rows for new booking
+    const ec=document.getElementById('offer-extra-rows');if(ec)ec.innerHTML='';
+  }
+  // Restore extra rows for edit
+  if(editId){
+    const bEdit=D.bookings.find(x=>x.id===editId);
+    const ec2=document.getElementById('offer-extra-rows');
+    if(ec2){
+      ec2.innerHTML='';
+      (bEdit&&bEdit.extraRows||[]).forEach(function(r){offerAddRow(r.desc,r.qty,r.price);});
+    }
   }
   calcBookingPrice();
   openMo('booking-modal');
+}
+
+// ── Offer extra rows helpers ─────────────────────────────────────────────────
+function offerRowHTML(desc, qty, price, idx){
+  return '<div class="offer-extra-row" data-idx="'+idx+'" style="display:grid;grid-template-columns:2fr 70px 90px 32px;gap:6px;align-items:center">'
+    +'<input type="text" value="'+escH(desc||'')+'" placeholder="z.B. Vorspeisen, Getränke…" style="font-size:12px" class="or-desc"/>'
+    +'<input type="number" value="'+(qty||'')+'" placeholder="Menge" step="any" min="0" style="font-size:12px;text-align:right" oninput="calcBookingPrice()" class="or-qty"/>'
+    +'<input type="number" value="'+(price||'')+'" placeholder="Preis €" step="0.01" min="0" style="font-size:12px;text-align:right" oninput="calcBookingPrice()" class="or-price"/>'
+    +'<button type="button" onclick="offerRemoveRow('+idx+')" style="width:28px;height:28px;border:none;background:var(--rlight);color:var(--red);border-radius:var(--r);cursor:pointer;font-size:14px;line-height:1">×</button>'
+    +'</div>';
+}
+function offerAddRow(desc,qty,price){
+  const container=document.getElementById('offer-extra-rows');
+  if(!container) return;
+  const idx=Date.now();
+  const div=document.createElement('div');
+  div.innerHTML=offerRowHTML(desc||'',qty||'',price||'',idx);
+  container.appendChild(div.firstChild);
+  calcBookingPrice();
+}
+function offerRemoveRow(idx){
+  const row=document.querySelector('#offer-extra-rows [data-idx="'+idx+'"]');
+  if(row){row.remove();calcBookingPrice();}
+}
+function offerGetExtraRows(){
+  const rows=[];
+  document.querySelectorAll('#offer-extra-rows .offer-extra-row').forEach(function(row){
+    const desc=row.querySelector('.or-desc').value.trim();
+    const qty=parseFloat(row.querySelector('.or-qty').value)||0;
+    const price=parseFloat(row.querySelector('.or-price').value)||0;
+    if(desc||qty||price) rows.push({desc,qty,price,total:qty*price});
+  });
+  return rows;
 }
 
 function saveBooking(){
@@ -2101,12 +2150,22 @@ function saveBooking(){
     return;
   }
   const price=calcBookingPrice();
+  const extraRows=offerGetExtraRows();
+  const extraTotal=extraRows.reduce(function(s,r){return s+r.total;},0);
+  const totalWithExtra=price.total+extraTotal;
+  const depositWithExtra=Math.round(totalWithExtra*0.5*100)/100;
   const isEdit=!!currentBookingId;
+  const bookingData={name,date:document.getElementById('bm-date').value,time:document.getElementById('bm-time').value,
+    location:document.getElementById('bm-location').value,guests:parseInt(document.getElementById('bm-guests').value)||0,
+    km:parseInt(document.getElementById('bm-km').value)||0,clientName:document.getElementById('bm-client-name').value,
+    clientEmail:document.getElementById('bm-client-email').value,clientTel:document.getElementById('bm-client-tel').value,
+    clientAddr:document.getElementById('bm-client-addr').value,totalPrice:totalWithExtra,depositAmount:depositWithExtra,
+    ppCost:price.pp,kmCost:price.kmCost,extraRows:extraRows};
   if(isEdit){
     const b=D.bookings.find(x=>x.id===currentBookingId);
-    Object.assign(b,{name,date:document.getElementById('bm-date').value,time:document.getElementById('bm-time').value,location:document.getElementById('bm-location').value,guests:parseInt(document.getElementById('bm-guests').value)||0,km:parseInt(document.getElementById('bm-km').value)||0,clientName:document.getElementById('bm-client-name').value,clientEmail:document.getElementById('bm-client-email').value,clientTel:document.getElementById('bm-client-tel').value,clientAddr:document.getElementById('bm-client-addr').value,totalPrice:price.total,depositAmount:price.deposit,ppCost:price.pp,kmCost:price.kmCost});
+    Object.assign(b,bookingData);
   } else {
-    D.bookings.push({id:uid(),offerNum:nextOfferNumber(),status:'anfrage',name,date:document.getElementById('bm-date').value,time:document.getElementById('bm-time').value,location:document.getElementById('bm-location').value,guests:parseInt(document.getElementById('bm-guests').value)||0,km:parseInt(document.getElementById('bm-km').value)||0,clientName:document.getElementById('bm-client-name').value,clientEmail:document.getElementById('bm-client-email').value,clientTel:document.getElementById('bm-client-tel').value,clientAddr:document.getElementById('bm-client-addr').value,totalPrice:price.total,depositAmount:price.deposit,ppCost:price.pp,kmCost:price.kmCost,invoices:[],createdAt:new Date().toISOString()});
+    D.bookings.push(Object.assign({id:uid(),offerNum:nextOfferNumber(),status:'anfrage',invoices:[],createdAt:new Date().toISOString()},bookingData));
   }
   saveAndSync(); closeMo('booking-modal'); renderBookings();
 }
@@ -2398,7 +2457,7 @@ function exportOfferPDF(bookingId){
   const b=D.bookings.find(x=>x.id===bookingId); if(!b) return;
   const today=new Date().toLocaleDateString('de-DE');
   const validUntil=new Date(Date.now()+14*24*60*60*1000).toLocaleDateString('de-DE');
-  const html=ogDocHTML('Angebot',b,{docNum:b.offerNum,docDate:today,bodyText:'Dieses Angebot ist freibleibend und bis zum <strong>'+validUntil+'</strong> gültig.<br>'+'Ein verbindlicher Vertrag kommt durch den fristgerechten Eingang der Anzahlung in Höhe von 50\u00a0% des im Angebot genannten Gesamtbetrages zustande.<br>'+'Die <strong>Anzahlung beträgt konkret: '+eur(b.depositAmount)+' (50\u00a0% des angebotenen Gesamtbetrages)</strong>.<br>'+'Mit Zahlungseingang gilt der Veranstaltungstermin als verbindlich reserviert.<br>'+'Die Anzahlung ist fällig bis spätestens <strong>'+validUntil+'</strong>.<br>'+'Der verbleibende Restbetrag in Höhe von 50\u00a0% ist spätestens 14 Tage vor dem Veranstaltungstermin zur Zahlung fällig.<br>'+'Das Angebot erfolgt auf Basis der beigefügten Leistungsbeschreibungen sowie der beigefügten Geschäftsbedingungen, die Bestandteil dieses Angebots sind. Mit fristgerechtem Zahlungseingang der Anzahlung erkennt der Kunde diese ausdrücklich an.<br>'+'Nach Eingang der Anzahlung erhält der Kunde eine Rechnung als Buchungsbestätigung.<br>'+'Erfolgt kein fristgerechter Zahlungseingang der Anzahlung, verfällt dieses Angebot automatisch und ersatzlos. Ein Anspruch auf die angebotenen Leistungen besteht in diesem Fall nicht.<br>'+'Die im Angebot zugrunde gelegte Teilnehmerzahl basiert auf einer vorläufigen Angabe des Kunden und dient als Kalkulationsgrundlage. Die verbindliche Teilnehmerzahl ist spätestens 14 Tage vor dem Veranstaltungstermin schriftlich mitzuteilen.<br>'+'Die finale Abrechnung erfolgt auf Basis der tatsächlich beauftragten bzw. fristgerecht mitgeteilten Teilnehmerzahl sowie etwaiger zusätzlich beauftragter Leistungen. Eine Anpassung des Gesamtpreises erfolgt entsprechend nach oben gemäß den im Angebot ausgewiesenen Preisen.<br>'+'Bereits geleistete Zahlungen werden auf die Schlussrechnung angerechnet. Ein sich daraus ergebender Differenzbetrag ist innerhalb von 7 Tagen nach Schlussrechnungstellung ohne Abzug zur Zahlung fällig.<br>'+'Änderungen des Leistungsumfangs oder der Teilnehmerzahl bedürfen der schriftlichen Bestätigung und werden gesondert berechnet.',tableRows:[{desc:'Pauschale "Gugel-Catering"',qty:1,price:OG.pauschale,total:OG.pauschale},...(b.km>0?[{desc:'Kilometerpauschale ab KM 50',qty:b.km,price:OG.kmRate,total:b.kmCost}]:[]),{desc:'Buffetpreis pro Person (beinhaltet 1,5 Pizzen pro Person)',qty:b.guests,price:OG.pricePerPerson,total:b.ppCost}],total:b.totalPrice,note:'Anmerkung: Die konkreten Pizzen aus den jeweiligen Kategorien werden bis spätestens 14 Tage vor dem Event besprochen.',legal:'Als Kleinunternehmer im Sinne des § 19 Abs. 1 UStG wird keine Umsatzsteuer ausgewiesen.\n\nBei Annahme des Angebots bitten wir um fristgerechte Bezahlung des genannten Betrags ohne Abzüge per Überweisung auf untenstehendes Konto.'});
+  const html=ogDocHTML('Angebot',b,{docNum:b.offerNum,docDate:today,bodyText:'Dieses Angebot ist freibleibend und bis zum <strong>'+validUntil+'</strong> gültig.<br>'+'Ein verbindlicher Vertrag kommt durch den fristgerechten Eingang der Anzahlung in Höhe von 50\u00a0% des im Angebot genannten Gesamtbetrages zustande.<br>'+'Die <strong>Anzahlung beträgt konkret: '+eur(b.depositAmount)+' (50\u00a0% des angebotenen Gesamtbetrages)</strong>.<br>'+'Mit Zahlungseingang gilt der Veranstaltungstermin als verbindlich reserviert.<br>'+'Die Anzahlung ist fällig bis spätestens <strong>'+validUntil+'</strong>.<br>'+'Der verbleibende Restbetrag in Höhe von 50\u00a0% ist spätestens 14 Tage vor dem Veranstaltungstermin zur Zahlung fällig.<br>'+'Das Angebot erfolgt auf Basis der beigefügten Leistungsbeschreibungen sowie der beigefügten Geschäftsbedingungen, die Bestandteil dieses Angebots sind. Mit fristgerechtem Zahlungseingang der Anzahlung erkennt der Kunde diese ausdrücklich an.<br>'+'Nach Eingang der Anzahlung erhält der Kunde eine Rechnung als Buchungsbestätigung.<br>'+'Erfolgt kein fristgerechter Zahlungseingang der Anzahlung, verfällt dieses Angebot automatisch und ersatzlos. Ein Anspruch auf die angebotenen Leistungen besteht in diesem Fall nicht.<br>'+'Die im Angebot zugrunde gelegte Teilnehmerzahl basiert auf einer vorläufigen Angabe des Kunden und dient als Kalkulationsgrundlage. Die verbindliche Teilnehmerzahl ist spätestens 14 Tage vor dem Veranstaltungstermin schriftlich mitzuteilen.<br>'+'Die finale Abrechnung erfolgt auf Basis der tatsächlich beauftragten bzw. fristgerecht mitgeteilten Teilnehmerzahl sowie etwaiger zusätzlich beauftragter Leistungen. Eine Anpassung des Gesamtpreises erfolgt entsprechend nach oben gemäß den im Angebot ausgewiesenen Preisen.<br>'+'Bereits geleistete Zahlungen werden auf die Schlussrechnung angerechnet. Ein sich daraus ergebender Differenzbetrag ist innerhalb von 7 Tagen nach Schlussrechnungstellung ohne Abzug zur Zahlung fällig.<br>'+'Änderungen des Leistungsumfangs oder der Teilnehmerzahl bedürfen der schriftlichen Bestätigung und werden gesondert berechnet.',tableRows:[{desc:'Pauschale "Gugel-Catering"',qty:1,price:OG.pauschale,total:OG.pauschale},...(b.km>0?[{desc:'Kilometerpauschale ab KM 50',qty:b.km,price:OG.kmRate,total:b.kmCost}]:[]),{desc:'Buffetpreis pro Person (beinhaltet 1,5 Pizzen pro Person)',qty:b.guests,price:OG.pricePerPerson,total:b.ppCost},...(b.extraRows||[])],total:b.totalPrice,note:'Anmerkung: Die konkreten Pizzen aus den jeweiligen Kategorien werden bis spätestens 14 Tage vor dem Event besprochen.',legal:'Als Kleinunternehmer im Sinne des § 19 Abs. 1 UStG wird keine Umsatzsteuer ausgewiesen.\n\nBei Annahme des Angebots bitten wir um fristgerechte Bezahlung des genannten Betrags ohne Abzüge per Überweisung auf untenstehendes Konto.'});
   openPrintWindow(html,'Angebot_'+b.offerNum);
   setBookingStatus(bookingId,'angebot');
 }
@@ -2424,36 +2483,96 @@ function openDepositInvoice(bookingId){
   if(document.getElementById('booking-detail-modal').classList.contains('open')) showBDTab('invoices');
 }
 
+// ── Flexible line-item rows for final invoice ──────────────────────────────
+function fiRowHTML(desc, qty, price, idx){
+  const total = (parseFloat(qty)||0) * (parseFloat(price)||0);
+  return '<div class="fi-row" data-idx="'+idx+'" style="display:grid;grid-template-columns:2fr 70px 90px 80px 32px;gap:6px;align-items:center">'
+    +'<input type="text" value="'+escH(desc||'')+'" placeholder="Leistungsbeschreibung" style="font-size:12px" oninput="fiUpdateRow('+idx+')" class="fi-desc"/>'
+    +'<input type="number" value="'+(qty||'')+'" placeholder="Menge" step="any" min="0" style="font-size:12px;text-align:right" oninput="fiUpdateRow('+idx+')" class="fi-qty"/>'
+    +'<input type="number" value="'+(price||'')+'" placeholder="Preis €" step="0.01" min="0" style="font-size:12px;text-align:right" oninput="fiUpdateRow('+idx+')" class="fi-price"/>'
+    +'<div class="fi-row-total" style="font-size:12px;text-align:right;font-family:monospace;color:var(--text);padding:0 4px">'+(total>0?eur(total):'–')+'</div>'
+    +'<button type="button" onclick="fiRemoveRow('+idx+')" style="width:28px;height:28px;border:none;background:var(--rlight);color:var(--red);border-radius:var(--r);cursor:pointer;font-size:14px;line-height:1;flex-shrink:0">×</button>'
+    +'</div>';
+}
+
+function fiGetRows(){
+  const rows=[];
+  document.querySelectorAll('#fi-rows-container .fi-row').forEach(function(row){
+    const desc  = row.querySelector('.fi-desc').value.trim();
+    const qty   = parseFloat(row.querySelector('.fi-qty').value)||0;
+    const price = parseFloat(row.querySelector('.fi-price').value)||0;
+    if(desc||qty||price) rows.push({desc,qty,price,total:qty*price});
+  });
+  return rows;
+}
+
+function fiUpdateRow(idx){
+  const container = document.getElementById('fi-rows-container');
+  const row = container.querySelector('[data-idx="'+idx+'"]');
+  if(!row) return;
+  const qty   = parseFloat(row.querySelector('.fi-qty').value)||0;
+  const price = parseFloat(row.querySelector('.fi-price').value)||0;
+  const total = qty*price;
+  row.querySelector('.fi-row-total').textContent = total>0 ? eur(total) : '–';
+  calcFinalInvoice();
+}
+
+function fiAddRow(desc, qty, price){
+  const container = document.getElementById('fi-rows-container');
+  const idx = Date.now();
+  const div = document.createElement('div');
+  div.innerHTML = fiRowHTML(desc||'', qty||'', price||'', idx);
+  container.appendChild(div.firstChild);
+  calcFinalInvoice();
+}
+
+function fiRemoveRow(idx){
+  const row = document.querySelector('#fi-rows-container [data-idx="'+idx+'"]');
+  if(row){ row.remove(); calcFinalInvoice(); }
+}
+
+function fiSetRows(rowsData){
+  const container = document.getElementById('fi-rows-container');
+  container.innerHTML = '';
+  rowsData.forEach(function(r, i){
+    const div = document.createElement('div');
+    div.innerHTML = fiRowHTML(r.desc, r.qty, r.price, Date.now()+i);
+    container.appendChild(div.firstChild);
+  });
+  calcFinalInvoice();
+}
+
 function openFinalInvoiceModal(bookingId){
   currentBookingId=bookingId;
   const b=D.bookings.find(x=>x.id===bookingId); if(!b) return;
   const depInv=(b.invoices||[]).find(i=>i.type==='deposit');
-  // Pre-fill invoice number and date
+  // Pre-fill number and date
   document.getElementById('fi-num').value=nextInvoiceNumber('SR');
   document.getElementById('fi-date').value=new Date().toISOString().substr(0,10);
-  // Pre-fill rows from booking data
-  document.getElementById('fi-row1-qty').value=b.km||0;         // km
-  document.getElementById('fi-row3-qty').value=b.guests||0;     // persons
   // Pre-fill deposit
   document.getElementById('fi-deposit-paid').value=depInv?depInv.amount:b.depositAmount;
   document.getElementById('fi-notes').value='';
-  calcFinalInvoice();
+  // Pre-fill rows from booking defaults (all editable)
+  const defaultRows=[];
+  if(b.km>0) defaultRows.push({desc:'An-/Abfahrt', qty:b.km, price:OG.kmRate});
+  defaultRows.push({desc:'Pauschale "Gugel-Catering"', qty:1, price:OG.pauschale});
+  defaultRows.push({desc:'Pizzabuffet pro Person', qty:b.guests||0, price:OG.pricePerPerson});
+  fiSetRows(defaultRows);
   openMo('final-invoice-modal');
 }
 
 function calcFinalInvoice(){
-  const km    = parseFloat(document.getElementById('fi-row1-qty').value)||0;
-  const pers  = parseFloat(document.getElementById('fi-row3-qty').value)||0;
-  const total = km*OG.kmRate + OG.pauschale + pers*OG.pricePerPerson;
-  // Store in hidden field for compatibility
-  document.getElementById('fi-total').value = total.toFixed(2);
-  const dep  = parseFloat(document.getElementById('fi-deposit-paid').value)||0;
-  const rest = total-dep;
+  const rows=fiGetRows();
+  const total=rows.reduce(function(s,r){return s+r.total;},0);
+  document.getElementById('fi-total').value=total.toFixed(2);
+  const dep=parseFloat(document.getElementById('fi-deposit-paid').value)||0;
+  const rest=total-dep;
   document.getElementById('fi-preview').innerHTML=
     '<div style="font-size:11px;color:var(--t3);margin-bottom:2px">Summe: <strong style="color:var(--text)">'+eur(total)+'</strong></div>'
-    +'<div style="font-size:11px;color:var(--amber)">- Anzahlung: '+eur(dep)+'</div>'
+    +'<div style="font-size:11px;color:var(--amber)">− Anzahlung: '+eur(dep)+'</div>'
     +'<div style="font-size:13px;font-weight:700;color:var(--blue);margin-top:4px;border-top:1px solid var(--border);padding-top:6px">Restbetrag: '+eur(rest)+'</div>';
 }
+
 
 function exportFinalInvoicePDF(){
   const b=D.bookings.find(x=>x.id===currentBookingId); if(!b) return;
