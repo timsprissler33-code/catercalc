@@ -2196,16 +2196,19 @@ function setBFilter(f){
 }
 
 function renderBookings(){
-  const total=D.bookings.length;
-  const confirmed=D.bookings.filter(b=>b.status==='bestaetigt').length;
-  const revenue=D.bookings.filter(b=>['bestaetigt','abgerechnet'].includes(b.status)).reduce((s,b)=>s+b.totalPrice,0);
-  const settled=D.bookings.filter(b=>b.status==='abgerechnet').length;
+  const year=getYear();
+  // Filter by event year (bookings without date shown in all years)
+  const yearFiltered=D.bookings.filter(b=>!b.date||new Date(b.date).getFullYear()===year);
+  const total=yearFiltered.length;
+  const confirmed=yearFiltered.filter(b=>b.status==='bestaetigt').length;
+  const revenue=yearFiltered.filter(b=>['bestaetigt','abgerechnet'].includes(b.status)).reduce((s,b)=>s+b.totalPrice,0);
+  const settled=yearFiltered.filter(b=>b.status==='abgerechnet').length;
   document.getElementById('booking-stats').innerHTML=`
-    <div class="sc"><div class="slbl">Anfragen gesamt</div><div class="sval bl">${total}</div></div>
+    <div class="sc"><div class="slbl">Anfragen ${year}</div><div class="sval bl">${total}</div></div>
     <div class="sc"><div class="slbl">Bestätigt</div><div class="sval" style="color:var(--amber)">${confirmed}</div></div>
     <div class="sc"><div class="slbl">Abgerechnet</div><div class="sval pos">${settled}</div></div>
     <div class="sc"><div class="slbl">Buchungsumsatz</div><div class="sval bl">${eur(revenue)}</div></div>`;
-  const filtered=D.bookings.filter(b=>currentBFilter==='all'||b.status===currentBFilter).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1);
+  const filtered=yearFiltered.filter(b=>currentBFilter==='all'||b.status===currentBFilter).sort((a,b)=>(a.date||'')>(b.date||'')?1:-1);
   const list=document.getElementById('booking-list');
   const empty=document.getElementById('booking-empty');
   if(!filtered.length){ list.innerHTML=''; empty.style.display='block'; return; }
