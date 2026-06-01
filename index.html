@@ -650,6 +650,28 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
     <span style="font-size:12px;color:var(--amber);font-weight:600">ℹ️ GWG-Regel (§ 6 Abs. 2 EStG): </span>
     <span style="font-size:12px;color:#92400e">Anschaffungen unter 800 € netto werden im Anschaffungsjahr vollständig abgezogen. Ab 800 € lineare AfA.</span>
   </div>
+  <!-- Search + Filter bar -->
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+    <div style="position:relative;flex:1;min-width:180px">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--t4);font-size:13px">🔍</span>
+      <input type="text" id="assets-search" placeholder="Anschaffung suchen…" oninput="renderAssets()"
+        style="width:100%;padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:var(--r);font-family:Sora,sans-serif;font-size:12px;background:var(--white)"/>
+    </div>
+    <select id="assets-sort" onchange="renderAssets()" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);font-family:Sora,sans-serif;font-size:12px;background:var(--white);color:var(--text)">
+      <option value="date-desc">Neueste zuerst</option>
+      <option value="date-asc">Älteste zuerst</option>
+      <option value="price-desc">Teuerste zuerst</option>
+      <option value="price-asc">Günstigste zuerst</option>
+      <option value="name-asc">Name A–Z</option>
+    </select>
+    <select id="assets-filter-type" onchange="renderAssets()" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);font-family:Sora,sans-serif;font-size:12px;background:var(--white);color:var(--text)">
+      <option value="all">Alle Typen</option>
+      <option value="gwg">Nur GWG</option>
+      <option value="afa">Nur AfA</option>
+      <option value="active">Nur Aktiv</option>
+      <option value="done">Nur Abgeschrieben</option>
+    </select>
+  </div>
   <div class="card"><div class="tw"><table>
     <thead><tr><th>Bezeichnung</th><th>Kaufdatum</th><th>Kaufpreis</th><th>Behandlung</th><th>AfA/Jahr</th><th>Restwert</th><th>Belege</th><th>Status</th><th></th></tr></thead>
     <tbody id="assets-table"></tbody>
@@ -1826,7 +1848,31 @@ function renderAssets(){
     <div class="sc"><div class="slbl">Restwert</div><div class="sval">${eur(totR)}</div></div>
     <div class="sc"><div class="slbl">AfA-Aufwand ${year}</div><div class="sval neg">${eur(totAfa)}</div></div>
     <div class="sc"><div class="slbl">Positionen ${year}</div><div class="sval bl">${visibleAssets.length}</div></div>`;
-  document.getElementById('assets-table').innerHTML=visibleAssets.map(a=>{
+  // Search
+  const astSearch=(document.getElementById('assets-search')||{}).value||'';
+  const astSort=(document.getElementById('assets-sort')||{}).value||'date-desc';
+  const astFilterType=(document.getElementById('assets-filter-type')||{}).value||'all';
+  const q=astSearch.toLowerCase().trim();
+  let displayAssets=[...visibleAssets];
+  // Text search
+  if(q) displayAssets=displayAssets.filter(a=>
+    (a.name||'').toLowerCase().includes(q)||
+    (a.cat||'').toLowerCase().includes(q)
+  );
+  // Type filter
+  if(astFilterType==='gwg')    displayAssets=displayAssets.filter(a=>a.gwg);
+  if(astFilterType==='afa')    displayAssets=displayAssets.filter(a=>!a.gwg);
+  if(astFilterType==='active') displayAssets=displayAssets.filter(a=>!a.gwg&&getRestwert(a)>0);
+  if(astFilterType==='done')   displayAssets=displayAssets.filter(a=>!a.gwg&&getRestwert(a)===0);
+  // Sort
+  displayAssets.sort((a,b)=>{
+    if(astSort==='date-asc')   return (a.date||'')<(b.date||'')?-1:1;
+    if(astSort==='price-desc') return b.price-a.price;
+    if(astSort==='price-asc')  return a.price-b.price;
+    if(astSort==='name-asc')   return (a.name||'').localeCompare(b.name||'');
+    return (a.date||'')>(b.date||'')?-1:1; // date-desc
+  });
+  document.getElementById('assets-table').innerHTML=displayAssets.map(a=>{
     const rest=getRestwert(a),abg=!a.gwg&&rest===0;
     const rcpts=(a.receipts||[]).map((r,ri)=>`<span class="rc-chip" onclick="viewAstRcptSaved('${a.id}',${ri})">📎 ${escH(r.name.substring(0,10))}</span>`).join('');
     return `<tr>
@@ -1843,7 +1889,7 @@ function renderAssets(){
         <button class="btn btn-danger" onclick="deleteAsset('${a.id}')">✕</button>
       </td>
     </tr>`;
-  }).join('')||`<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--t4)">Noch keine Anschaffungen.</td></tr>`;
+  }).join('')||`<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--t4)">${q||astFilterType!=='all'?'Keine Anschaffungen gefunden.':'Noch keine Anschaffungen.'}</td></tr>`;
 }
 function viewAstRcptSaved(aid,ri){const a=D.assets.find(x=>x.id===aid);if(a?.receipts?.[ri])showRcptView(a.receipts[ri]);}
 
