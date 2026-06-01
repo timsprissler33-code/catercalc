@@ -421,6 +421,21 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
     <div><div class="page-title">Events</div><div class="page-sub">Kalkulation &amp; Nachkalkulation</div></div>
     <div class="ph-actions"><button class="btn btn-primary" onclick="openEventModal()">＋ Neues Event</button></div>
   </div>
+  <!-- Search + Sort bar -->
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+    <div style="position:relative;flex:1;min-width:180px">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--t4);font-size:13px">🔍</span>
+      <input type="text" id="events-search" placeholder="Event suchen…" oninput="renderEvents()"
+        style="width:100%;padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:var(--r);font-family:Sora,sans-serif;font-size:12px;background:var(--white)"/>
+    </div>
+    <select id="events-sort" onchange="renderEvents()" style="padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);font-family:Sora,sans-serif;font-size:12px;background:var(--white);color:var(--text)">
+      <option value="date-desc">Neueste zuerst</option>
+      <option value="date-asc">Älteste zuerst</option>
+      <option value="name-asc">Name A–Z</option>
+      <option value="revenue-desc">Umsatz ↓</option>
+      <option value="profit-desc">Gewinn ↓</option>
+    </select>
+  </div>
   <div class="card">
     <div class="tw">
       <table><thead><tr><th>Event</th><th>Datum</th><th>Typ</th><th>Umsatz</th><th>Kosten</th><th>Gewinn</th><th>Marge</th><th>km</th><th>Status</th><th></th></tr></thead>
@@ -428,7 +443,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
     </div>
     <div id="events-empty" class="empty" style="display:none">
       <div class="empty-icon">📋</div>
-      <div style="font-size:13px;margin-bottom:12px;color:var(--t3)">Noch keine Events vorhanden.</div>
+      <div style="font-size:13px;margin-bottom:12px;color:var(--t3)">Keine Events gefunden.</div>
       <button class="btn btn-primary" onclick="openEventModal()">Erstes Event anlegen</button>
     </div>
   </div>
@@ -479,9 +494,21 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
     </div>
     <!-- Ausgaben -->
     <div class="card">
-      <div class="ctrow">
+      <div class="ctrow" style="margin-bottom:10px">
         <span class="card-title" style="margin:0">🧾 Ausgaben</span>
-        
+        <div style="display:flex;gap:6px;align-items:center">
+          <div style="position:relative">
+            <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--t4);font-size:11px">🔍</span>
+            <input type="text" id="exp-search" placeholder="Suchen…" oninput="renderDetailTables()"
+              style="padding:5px 8px 5px 24px;border:1px solid var(--border);border-radius:var(--r);font-size:11px;width:130px;font-family:Sora,sans-serif"/>
+          </div>
+          <select id="exp-sort" onchange="renderDetailTables()" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);font-size:11px;font-family:Sora,sans-serif;background:var(--white);color:var(--text)">
+            <option value="newest">Neueste zuerst</option>
+            <option value="oldest">Älteste zuerst</option>
+            <option value="highest">Höchste zuerst</option>
+            <option value="lowest">Niedrigste zuerst</option>
+          </select>
+        </div>
       </div>
       <div class="astrip">
         <div class="fgrp"><label>Kategorie</label>
@@ -1119,8 +1146,25 @@ function saveEvent(){
 }
 function renderEvents(){
   const year=getYear();
-  const filtered=D.events.filter(e=>!e.date||new Date(e.date).getFullYear()===year);
-  const sorted=[...filtered].sort((a,b)=>(b.date||'')<(a.date||'')?-1:1);
+  const searchEl=document.getElementById('events-search');
+  const sortEl=document.getElementById('events-sort');
+  const q=(searchEl?searchEl.value:'').toLowerCase().trim();
+  const sortMode=sortEl?sortEl.value:'date-desc';
+  let filtered=D.events.filter(e=>!e.date||new Date(e.date).getFullYear()===year);
+  // Search
+  if(q) filtered=filtered.filter(e=>
+    (e.name||'').toLowerCase().includes(q)||
+    (e.location||'').toLowerCase().includes(q)||
+    (e.type||'').toLowerCase().includes(q)
+  );
+  // Sort
+  const sorted=[...filtered].sort((a,b)=>{
+    if(sortMode==='date-asc')  return (a.date||'')<(b.date||'')?-1:1;
+    if(sortMode==='name-asc')  return (a.name||'').localeCompare(b.name||'');
+    if(sortMode==='revenue-desc') return evRev(b)-evRev(a);
+    if(sortMode==='profit-desc')  return (evRev(b)-evCost(b,true))-(evRev(a)-evCost(a,true));
+    return (a.date||'')>(b.date||'')?-1:1; // date-desc default
+  });
   const tb=document.getElementById('events-table');
   document.getElementById('events-empty').style.display=sorted.length?'none':'block';
   tb.innerHTML=sorted.map(ev=>{
@@ -1199,8 +1243,26 @@ function renderDetailTables(){
   ).join('')||`<tr><td colspan="3" style="text-align:center;padding:12px;color:var(--t4)">Noch keine Einnahmen.</td></tr>`;
   document.getElementById('income-total').textContent=eur(rev);
 
-  // Expense table
-  document.getElementById('expense-table').innerHTML=(ev.expenses||[]).map((exp,i)=>{
+  // Expense table with search + sort
+  const expSearchEl=document.getElementById('exp-search');
+  const expSortEl=document.getElementById('exp-sort');
+  const expQ=(expSearchEl?expSearchEl.value:'').toLowerCase().trim();
+  const expSort=expSortEl?expSortEl.value:'newest';
+  let expenses=[...(ev.expenses||[]).map((e,i)=>({...e,_i:i}))];
+  // Search
+  if(expQ) expenses=expenses.filter(e=>
+    (e.cat||'').toLowerCase().includes(expQ)||
+    (e.desc||'').toLowerCase().includes(expQ)
+  );
+  // Sort (expenses don't always have a date — treat missing as "oldest")
+  expenses.sort((a,b)=>{
+    if(expSort==='oldest')  return (a._i)-(b._i);
+    if(expSort==='highest') return b.amount-a.amount;
+    if(expSort==='lowest')  return a.amount-b.amount;
+    return (b._i)-(a._i); // newest = reverse insertion order
+  });
+  document.getElementById('expense-table').innerHTML=expenses.map(exp=>{
+    const i=exp._i;
     const rcpts=(exp.receipts||[]).map((r,ri)=>`<span class="rc-chip" onclick="viewRcpt('ev','${curEv}',${i},${ri})">📎 ${escH(r.name.substring(0,11))}</span>`).join('');
     const addBtn=`<label class="rc-add" title="Beleg anhängen">＋<input type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="addRcptToExp('${curEv}',${i},this)"/></label>`;
     return `<tr>
@@ -1213,7 +1275,7 @@ function renderDetailTables(){
         <button class="btn btn-danger" onclick="removeExpense(${i})">✕</button>
       </td>
     </tr>`;
-  }).join('')||`<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--t4)">Noch keine Ausgaben.</td></tr>`;
+  }).join('')||`<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--t4)">${expQ?'Keine Ausgaben gefunden.':'Noch keine Ausgaben.'}</td></tr>`;
   document.getElementById('expense-total').textContent=eur(cost);
 }
 
@@ -2242,17 +2304,48 @@ let currentBFilter='all';
 let currentBookingId=null;
 let currentBDTab='overview';
 
-function nextOfferNumber(){
-  const existing=(D.bookings||[]).map(b=>b.offerNum||'').filter(Boolean);
-  let max=0;
-  existing.forEach(n=>{ const m=n.match(/A-OG27-(\d+)/); if(m) max=Math.max(max,parseInt(m[1])); });
-  return 'A-OG27-'+String(max+1).padStart(3,'0');
+// Derive 2-digit year suffix from event date (falls back to current year)
+function yearSuffix(dateStr){
+  var d = dateStr ? new Date(dateStr) : new Date();
+  return String(d.getFullYear()).slice(-2); // "2026" → "26"
 }
-function nextInvoiceNumber(prefix){
-  const existing=(D.bookings||[]).flatMap(b=>(b.invoices||[]).map(i=>i.num||'')).filter(Boolean);
-  const pre=prefix||'AR'; let max=0;
-  existing.forEach(n=>{ const m=n.match(new RegExp(pre+'-\\d{4}-(\\d+)')); if(m) max=Math.max(max,parseInt(m[1])); });
-  return pre+'-'+new Date().getFullYear()+'-'+String(max+1).padStart(3,'0');
+
+// A-OF26-001, A-OF27-001 etc. — counter resets each year
+function nextOfferNumber(eventDate){
+  var yy = yearSuffix(eventDate);
+  var prefix = 'A-OF'+yy+'-';
+  var existing = (D.bookings||[]).map(function(b){return b.offerNum||'';}).filter(Boolean);
+  var max = 0;
+  existing.forEach(function(n){
+    var m = n.match(new RegExp('A-OF'+yy+'-(\\d+)'));
+    if(m) max = Math.max(max, parseInt(m[1]));
+  });
+  return prefix + String(max+1).padStart(3,'0');
+}
+
+// AR-OF26-001 / SR-OF26-001 — derived from the booking's offerNum so they always match
+function invoiceNumberFromOffer(prefix, offerNum){
+  // offerNum = "A-OF26-003" → invoiceNum = "AR-OF26-003" or "SR-OF26-003"
+  if(offerNum){
+    var core = offerNum.replace(/^A-/, ''); // "OF26-003"
+    return prefix + '-' + core;            // "AR-OF26-003"
+  }
+  // Fallback: sequential
+  var yy = yearSuffix();
+  var existing = (D.bookings||[]).flatMap(function(b){return (b.invoices||[]).map(function(i){return i.num||'';});}).filter(Boolean);
+  var max = 0;
+  existing.forEach(function(n){
+    var m = n.match(new RegExp(prefix+'-OF'+yy+'-(\\d+)'));
+    if(m) max = Math.max(max, parseInt(m[1]));
+  });
+  return prefix+'-OF'+yy+'-'+String(max+1).padStart(3,'0');
+}
+
+// Keep nextInvoiceNumber as alias (called in a few places with just prefix)
+function nextInvoiceNumber(prefix, bookingId){
+  var b = bookingId ? D.bookings.find(function(x){return x.id===bookingId;}) : null;
+  var offerNum = b ? b.offerNum : null;
+  return invoiceNumberFromOffer(prefix||'AR', offerNum);
 }
 
 function calcBookingPrice(){
@@ -2406,7 +2499,7 @@ function saveBooking(){
     const b=D.bookings.find(x=>x.id===currentBookingId);
     Object.assign(b,bookingData);
   } else {
-    D.bookings.push(Object.assign({id:uid(),offerNum:nextOfferNumber(),status:'anfrage',invoices:[],createdAt:new Date().toISOString()},bookingData));
+    D.bookings.push(Object.assign({id:uid(),offerNum:nextOfferNumber(document.getElementById('bm-date').value),status:'anfrage',invoices:[],createdAt:new Date().toISOString()},bookingData));
   }
   saveAndSync(); closeMo('booking-modal'); renderBookings();
 }
@@ -2745,7 +2838,7 @@ function openDepositInvoice(bookingId){
     return;
   }
   // Create new deposit invoice (no confirm() - blocked by some browsers on HTTPS)
-  const num=nextInvoiceNumber('AR');
+  const num=nextInvoiceNumber('AR', b.id);
   const today=new Date().toLocaleDateString('de-DE');
   const inv={id:uid(),type:'deposit',num,amount:b.depositAmount,date:new Date().toISOString().substr(0,10),paid:false};
   b.invoices=b.invoices||[]; b.invoices.push(inv); saveAndSync();
@@ -2819,7 +2912,7 @@ function openFinalInvoiceModal(bookingId){
   const b=D.bookings.find(x=>x.id===bookingId); if(!b) return;
   const depInv=(b.invoices||[]).find(i=>i.type==='deposit');
   // Pre-fill number and date
-  document.getElementById('fi-num').value=nextInvoiceNumber('SR');
+  document.getElementById('fi-num').value=nextInvoiceNumber('SR', bookingId);
   document.getElementById('fi-date').value=new Date().toISOString().substr(0,10);
   // Pre-fill deposit
   document.getElementById('fi-deposit-paid').value=depInv?depInv.amount:b.depositAmount;
