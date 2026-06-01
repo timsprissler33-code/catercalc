@@ -1009,6 +1009,44 @@ hr.div{border:none;border-top:1px solid var(--border);margin:18px 0}
   </div>
 </div>
 
+
+<!-- Cloud Sync Modal -->
+<div class="mo" id="sync-modal">
+  <div class="modal" style="width:540px">
+    <div class="modal-title">&#9729; Cloud Sync</div>
+    <div style="background:var(--glight);border:1px solid #bbf7d0;border-radius:var(--r);padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.8;color:var(--green)"><strong>&#10003; Verbunden:</strong> Supabase</div>
+    <input type="hidden" id="sb-url" value="https://naakcmagdkblhfwawlrf.supabase.co"/>
+    <input type="hidden" id="sb-key" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hYWtjbWFnZGtibGhmd2F3bHJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDY2NTAsImV4cCI6MjA5MDI4MjY1MH0.hR8hpOcfwYb6lfFGz1RKN1_E-rWcOVXPAjAYar4Id5M"/>
+    <div id="sb-status" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:var(--r);font-size:12px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" onclick="sbTest()">Verbindung testen</button>
+      <button class="btn btn-primary btn-sm" onclick="sbUpload().then(function(){sbShowStatus('success','Hochgeladen!');})">&#8593; Hochladen</button>
+      <button class="btn btn-ghost btn-sm" onclick="sbDownload().then(function(r){if(r){applyRemote(r.data);save();renderDashboard();sbShowStatus('success','Geladen!');}})">&#8595; Herunterladen</button>
+      <button class="btn btn-sm" style="background:var(--green);color:#fff" onclick="sbForceDownload()">Alle Daten laden</button>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeMo('sync-modal')">Schlie&#223;en</button></div>
+  </div>
+</div>
+<!-- Import Modal -->
+<div class="mo" id="import-modal">
+  <div class="modal" style="width:560px">
+    <div class="modal-title">&#128229; Daten importieren</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">
+      <div style="border:1px solid var(--border);border-radius:var(--r);padding:14px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">Backup-Datei hochladen</div>
+        <label class="btn btn-primary btn-sm" style="cursor:pointer">Datei ausw&#228;hlen<input type="file" accept=".json,.html" style="display:none" onchange="handleImportFileInModal(this)"/></label>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:var(--r);padding:14px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">JSON einf&#252;gen</div>
+        <textarea id="import-json-text" rows="3" style="width:100%;font-family:monospace;font-size:11px"></textarea>
+        <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="importFromText()">Importieren</button>
+      </div>
+    </div>
+    <div id="import-status" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:var(--r);font-size:12px"></div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeMo('import-modal')">Schlie&#223;en</button></div>
+  </div>
+</div>
+
 <script>
 // ================================================================
 //  DATA
@@ -2863,143 +2901,28 @@ function exportOfferPDF(bookingId){
     tableRows.push({desc:'Pauschale "Gugel-Catering"',qty:1,price:OG.pauschale,total:OG.pauschale});
     tableRows.push({desc:'Buffetpreis pro Person (beinhaltet 1,5 Pizzen pro Person)',qty:b.guests,price:OG.pricePerPerson,total:b.ppCost});
   }
+  var total = b.totalPrice || 0;
+  var deposit = b.depositAmount || Math.round(total*0.5*100)/100;
   var html=ogDocHTML('Angebot',b,{
     docNum:b.offerNum, docDate:today, bodyText:bodyText, tableRows:tableRows,
-    total:b.totalPrice,
+    total:total,
     note:'Anmerkung: Die konkreten Pizzen aus den jeweiligen Kategorien werden bis spätestens 14 Tage vor dem Event besprochen.',
     legal:'Als Kleinunternehmer im Sinne des § 19 Abs. 1 UStG wird keine Umsatzsteuer ausgewiesen.\n\nBei Annahme des Angebots bitten wir um fristgerechte Bezahlung des genannten Betrags ohne Abzüge per Überweisung auf untenstehendes Konto.'
   });
-  // Build extra pages (Leistungsumfang + Geschäftsbedingungen)
-  var extraPages = buildOfferExtraPages(b);
-  // Combine into single printable HTML
-  var combinedHtml = html.replace('</body></html>', extraPages + '</body></html>');
-  openPrintWindow(combinedHtml,'Angebot_'+b.offerNum);
+  // Build extra pages and combine into one document
+  var extra=buildOfferExtraPages(b);
+  // Split html at closing tags, insert extra pages before </body>
+  var htmlWithoutClose = html.lastIndexOf('</body>') >= 0
+    ? html.substring(0, html.lastIndexOf('</body>'))
+    : html;
+  var combined = htmlWithoutClose
+    + '<div style="page-break-before:always"></div>' + extra.leistung_body
+    + '<div style="page-break-before:always"></div>' + extra.agb_body
+    + '</body></html>';
+  openPrintWindow(combined,'Angebot_'+b.offerNum);
   setBookingStatus(bookingId,'angebot');
 }
 
-function buildOfferExtraPages(b){
-  var og = getOG();
-  var fmtDate = function(s){ try{ return s?new Date(s).toLocaleDateString('de-DE'):'–'; }catch(e){return s||'–';} };
-
-  // Shared header (same style as main offer)
-  function pageHeader(title){
-    return '<div style="page-break-before:always;padding:14mm 16mm 12mm 16mm;font-family:\'Sora\',Helvetica,Arial,sans-serif;font-size:10px;color:#1a1a1a;max-width:794px;margin:0 auto">'
-      // orange stripe
-      +'<div style="background:#c8820a;height:5px;width:100%;margin-bottom:10px;border-radius:1px"></div>'
-      // header
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:2.5px solid #c8820a">'
-        +'<div style="display:flex;align-items:center;gap:10px">'
-          +'<img src="'+LOGO_DATA_URL+'" style="width:44px;height:44px;object-fit:contain"/>'
-          +'<div><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px">Ofengugel</div>'
-          +'<div style="font-size:9px;color:#999;margin-top:2px">'+og.sub+'</div></div>'
-        +'</div>'
-        +'<div style="text-align:right;font-size:9px;color:#666;line-height:1.75">'
-          +'<strong style="color:#1a1a1a;font-size:9.5px">'+og.name+'</strong><br>'
-          +og.owner+'<br>'+og.street+'<br>'+og.city+'<br><br>'+og.email+'<br>'+og.tel
-        +'</div>'
-      +'</div>'
-      // doc title
-      +'<div style="font-size:20px;font-weight:800;margin-bottom:12px">'+title+'</div>'
-      // meta grid
-      +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #ddd;font-size:9px">'
-        +'<tr>'
-          +'<td style="color:#888;padding:2px 0;padding-right:8px;white-space:nowrap">Rechnungsnummer:</td><td style="font-weight:500;color:#1a1a1a">'+b.offerNum+'</td>'
-          +'<td style="width:20px"></td>'
-          +'<td style="color:#888;padding:2px 0;padding-right:8px;white-space:nowrap">Datum des Angebots:</td><td style="font-weight:500;color:#1a1a1a">'+new Date().toLocaleDateString('de-DE')+'</td>'
-        +'</tr><tr>'
-          +'<td style="color:#888;padding:2px 0;padding-right:8px">Datum des Events:</td><td style="font-weight:500;color:#1a1a1a">'+fmtDate(b.date)+'</td>'
-          +'<td></td>'
-          +'<td style="color:#888;padding:2px 0;padding-right:8px">Anzahl Personen:</td><td style="font-weight:500;color:#1a1a1a">'+(b.guests||'–')+'</td>'
-        +'</tr><tr>'
-          +'<td style="color:#888;padding:2px 0;padding-right:8px">Gebuchte Leistung:</td><td style="font-weight:500;color:#1a1a1a">Gugel-Catering</td>'
-          +'<td></td>'
-          +'<td style="color:#888;padding:2px 0;padding-right:8px">Ort des Events:</td><td style="font-weight:500;color:#1a1a1a">'+(b.location||'–')+'</td>'
-        +'</tr>'
-      +'</table>';
-  }
-
-  function pageFooter(){
-    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding-top:8px;border-top:2px solid #c8820a;font-size:8.5px;color:#999;line-height:1.85;margin-top:auto">'
-      +'<div><strong style="color:#555">'+og.name+'</strong><br>'+og.owner+'<br>'+og.street+'<br>'+og.city+'</div>'
-      +'<div><strong style="color:#555">'+og.bank+'</strong><br>Empfänger: '+og.bankRecipient+'<br>IBAN: '+og.iban+'<br>BIC: '+og.bic+'</div>'
-      +'</div></div>';
-  }
-
-  function h2(txt){
-    return '<div style="font-size:11px;font-weight:700;color:#1a1a1a;margin:14px 0 3px">'+txt+'</div>';
-  }
-  function p(txt){
-    return '<div style="font-size:9.5px;color:#333;line-height:1.7;margin-bottom:4px">'+txt+'</div>';
-  }
-
-  // ── PAGE 2: Leistungsumfang ──────────────────────────────────────────────
-  var page2 = pageHeader('Leistungsumfang')
-    + p('Der Leistungsumfang umfasst:')
-    + h2('Mobiles Catering')
-    + p('- 50 km An- und Abfahrt (ab dem 51. km wird zusätzlich eine Kilometerpauschale auf der Rechnung ausgewiesen) - Ausgangspunkt: Calw<br>'
-      +'- Auf- und Abbau des Caterings<br>'
-      +'- Catering-Setup bestehend aus:<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- 1–2 Gasöfen je nach Größe der Veranstaltung inkl. Gas<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- mindestens 1 Pizzabäcker je nach Größe der Veranstaltung<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- Pavillon bei Bedarf<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- Servierbretter und Pizzaheber für Selbstbedienungsbuffet<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- Einweggeschirr<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- Backtische sowie erforderliche Ablageflächen in Absprache mit dem Auftraggeber<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- 3 Stunden Backzeit zzgl. Auf- und Abbauzeit<br>'
-      +'- Zubereitung von allen bestellten Pizzen inkl. der bestellten Zutaten (verbleibende Pizzen werden am Ende der Backzeit gebacken und in Pizzakartons an den Veranstalter ausgegeben) - die Anzahl der Pizzen ergibt sich aus dem 1,5-fachen der angegebenen Personenzahl. Abweichungen hiervon sind separat berechnet')
-    + h2('Gugel-Catering')
-    + p('- Alle Leistungen des Mobilen Caterings<br>'
-      +'- Zusätzlich die Bereitstellung des „Gugel-Anhängers“ als Catering-Setup')
-    + h2('Pizza-Party')
-    + p('- 50 km An- und Abfahrt (ab dem 51. km wird zusätzlich eine Kilometerpauschale auf der Rechnung ausgewiesen) - Ausgangspunkt: Calw<br>'
-      +'- Auf- und Abbau der Öfen<br>'
-      +'- Setup bestehend aus:<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- 1–2 Gasöfen je nach Größe der Veranstaltung inkl. Gas<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- mindestens 1 Pizzabäcker je nach Größe der Veranstaltung<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- Pavillon bei Bedarf<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- Einweggeschirr<br>'
-      +'&nbsp;&nbsp;&nbsp;&nbsp;- 2 Stunden gemeinsame Backzeit zzgl. Auf- und Abbauzeit<br>'
-      +'- Zubereitung von allen bestellten Pizzen inkl. der bestellten Zutaten (verbleibende Pizzen werden am Ende der Backzeit gebacken und in Pizzakartons an den Veranstalter ausgegeben) - die Anzahl der Pizzen ergibt sich aus dem 1,5-fachen der angegebenen Personenzahl. Abweichungen hiervon sind separat berechnet')
-    + pageFooter();
-
-  // ── PAGE 3: Geschäftsbedingungen ─────────────────────────────────────────
-  var page3 = pageHeader('Geschäftsbedingungen')
-    + h2('1) Geltungsbereich')
-    + p('Diese Geschäftsbedingungen gelten für alle Catering- und Veranstaltungsleistungen des Auftragnehmers.<br>'
-      +'Sie werden mit Zustandekommen des Vertrags verbindlicher Bestandteil des Vertrags.')
-    + h2('2) Vertragsschluss')
-    + p('Der Vertrag kommt ausschließlich durch den fristgerechten Zahlungseingang des im Angebot genannten Anzahlungsbetrags zustande.<br>'
-      +'Mit Zahlung der Anzahlung erkennt der Kunde diese Buchungsbedingungen ausdrücklich an.<br>'
-      +'Mit Eingang der Anzahlung verpflichtet sich der Kunde zur Begleichung des verbleibenden Restbetrags spätestens 14 Tage vor dem im Angebot genannten Veranstaltungstermin.')
-    + h2('3) Stornierungsbedingungen')
-    + p('Eine Stornierung ist ausschließlich in Textform möglich. Maßgeblich für den Zeitpunkt der Stornierung ist der Eingang der Stornierungserklärung beim Auftragnehmer.<br>'
-      +'Es gelten folgende Stornierungsbedingungen:<br>'
-      +'- bis mehr als 14 Tage vor dem Veranstaltungstermin: 50 % des vereinbarten Gesamtbetrags<br>'
-      +'- 14 Tage oder weniger vor dem Veranstaltungstermin: 100 % des vereinbarten Gesamtbetrags')
-    + h2('4) Rücktrittsrechte')
-    + p('Ein außerordentlicher Rücktritt vom Vertrag ist, soweit gesetzlich zulässig, ausgeschlossen.<br>'
-      +'Dies gilt insbesondere bei: Krankheit des Kunden oder von Gästen, Schlechtwetter oder ungünstigen Witterungsbedingungen, Änderungen der Teilnehmerzahl, persönlichen oder organisatorischen Gründen.')
-    + h2('5) Umbuchung')
-    + p('Eine Umbuchung auf einen anderen Veranstaltungstermin ist nur im gegenseitigen Einvernehmen möglich.<br>'
-      +'Für jede genehmigte Umbuchung wird eine Umbuchungspauschale in Höhe von 200 € erhoben.<br>'
-      +'Wird kein geeigneter Alternativtermin gefunden oder vereinbart, erhält der Kunde einen Gutschein in Höhe des ursprünglich gebuchten Betrags abzüglich der Umbuchungspauschale.<br>'
-      +'Der Gutschein ist 12 Monate ab Ausstellungsdatum gültig.<br>'
-      +'Eine Barauszahlung des Gutscheinwerts ist ausgeschlossen.')
-    + h2('6) Pflichten des Auftraggebers')
-    + p('Der Kunde stellt sicher, dass dem Auftragnehmer unentgeltlich und rechtzeitig alle für die Durchführung des Caterings erforderlichen Voraussetzungen zur Verfügung stehen, insbesondere: Ausreichende Stromversorgung, geeignete Aufstell- und Arbeitsflächen, geeigneter Zugang zur Veranstaltungslocation, Nutzung von sanitären Anlagen (WC) für das Personal.<br>'
-      +'Bei mobilem Catering, Pizza-Partys oder Teambacken ohne „Gugel-Anhänger“ sind geeignete Tische vom Auftraggeber bereitzustellen.<br>'
-      +'Sind diese Voraussetzungen nicht oder nicht rechtzeitig erfüllt, ist eine ordnungsgemäße Leistungserbringung nicht möglich. In diesem Fall bleibt der volle Vergütungsanspruch des Auftragnehmers bestehen.<br>'
-      +'Hinweis: Der Betrieb von Gasöfen ist ausschließlich im Außenbereich zulässig.')
-    + h2('7) Foto- und Filmrechte')
-    + p('Der Kunde gestattet dem Auftragnehmer, vor Ort Fotos der Location, der Räumlichkeiten sowie der Veranstaltung anzufertigen.<br>'
-      +'Diese dürfen zeitlich und räumlich unbegrenzt zu Werbe- und Referenzzwecken, insbesondere auf der Website und in sozialen Medien, verwendet werden.<br>'
-      +'Personen werden hierbei nur beiwerkartig oder unkenntlich dargestellt, sofern keine gesonderte Einwilligung vorliegt.')
-    + h2('8) Wirksamkeit')
-    + p('Sollten einzelne Bestimmungen dieser Buchungsbedingungen unwirksam sein oder werden, bleibt die Wirksamkeit der übrigen Bestimmungen unberührt.')
-    + pageFooter();
-
-  return page2 + page3;
-}
 
 function openDepositInvoice(bookingId){
   const b=D.bookings.find(x=>x.id===bookingId); if(!b) return;
@@ -3166,648 +3089,201 @@ function reExportInvoice(bookingId,idx){
 }
 
 function ogDocHTML(docType,b,opts){
-  const {docNum,docDate,bodyText,tableRows,total,note,legal,showAbzug,abzugAmount,abzugDate,restAmount}=opts;
-  const og=getOG();
-  const fmtE=n=>typeof n==='number'?(n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+'\u00a0\u20ac':String(n||'');
-
-  // Table rows
-  const rows=tableRows.map(function(r){
-    var isNote = r.qty==='' && r.price==='';
-    if(isNote) return '<tr><td colspan="4" style="padding:4px 8px 8px 8px;font-size:9px;color:#888;font-style:italic;border-bottom:none">'+r.desc+'</td></tr>';
-    return '<tr>'
-      +'<td style="padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:10px;vertical-align:top">'+r.desc+'</td>'
-      +'<td style="padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:10px;text-align:right;vertical-align:top">'+(r.qty||'')+'</td>'
-      +'<td style="padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:10px;text-align:right;vertical-align:top">'+(typeof r.price==='number'?fmtE(r.price):(r.price||''))+'</td>'
-      +'<td style="padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:10px;text-align:right;vertical-align:top;font-weight:600">'+(typeof r.total==='number'?fmtE(r.total):(r.total||''))+'</td>'
-      +'</tr>';
-  }).join('');
-
-  // Total / Abzug rows
-  const sumRow = showAbzug
-    ? '<tr><td colspan="3" style="text-align:right;padding:6px 8px;font-size:10px;color:#666;border-top:1px solid #eee">Zwischensumme</td><td style="text-align:right;padding:6px 8px;font-size:10px;font-weight:600;border-top:1px solid #eee">'+fmtE(total)+'</td></tr>'
+  var og=getOG();
+  var LOGO="data:image/png;base64,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";
+  var d=opts||{};
+  var docNum=d.docNum||"",docDate=d.docDate||"",bodyText=d.bodyText||"";
+  var tableRows=d.tableRows||[],total=d.total||0,note=d.note||"",legal=d.legal||"";
+  var showAbzug=d.showAbzug,abzugAmount=d.abzugAmount||0,abzugDate=d.abzugDate||"",restAmount=d.restAmount||0;
+  function fmtE(n){return typeof n==="number"?(n).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})+" €":String(n||"");}
+  var rows=tableRows.map(function(r){
+    if(r.qty===""&&r.price==="") return '<tr><td colspan="4" style="padding:4px 8px 8px;font-size:9px;color:#888;font-style:italic;border-bottom:none">'+r.desc+'</td></tr>';
+    return '<tr><td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;font-size:10px">'+r.desc+'</td>'
+      +'<td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;font-size:10px;text-align:right">'+( r.qty||"")+'</td>'
+      +'<td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;font-size:10px;text-align:right">'+(typeof r.price==="number"?fmtE(r.price):(r.price||""))+'</td>'
+      +'<td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;font-size:10px;text-align:right;font-weight:600">'+(typeof r.total==="number"?fmtE(r.total):(r.total||""))+'</td></tr>';
+  }).join("");
+  var sumRow=showAbzug
+    ?'<tr><td colspan="3" style="text-align:right;padding:5px 8px;font-size:10px;color:#666;border-top:1px solid #eee">Zwischensumme</td><td style="text-align:right;padding:5px 8px;font-size:10px;font-weight:600;border-top:1px solid #eee">'+fmtE(total)+'</td></tr>'
       +'<tr><td colspan="3" style="text-align:right;padding:4px 8px;font-size:10px;color:#c8820a">abzüglich Anzahlung vom '+abzugDate+'</td><td style="text-align:right;padding:4px 8px;font-size:10px;color:#c8820a;font-weight:600">−'+fmtE(abzugAmount)+'</td></tr>'
-      +'<tr><td colspan="3" style="text-align:right;padding:8px 8px;font-size:12px;font-weight:700;color:#c8820a;border-top:2px solid #c8820a">Restbetrag fällig</td><td style="text-align:right;padding:8px 8px;font-size:14px;font-weight:800;color:#c8820a;border-top:2px solid #c8820a">'+fmtE(restAmount)+'</td></tr>'
-    : '<tr><td colspan="3" style="text-align:right;padding:8px 8px;font-size:12px;font-weight:700;color:#c8820a;border-top:2px solid #c8820a">Summe</td><td style="text-align:right;padding:8px 8px;font-size:14px;font-weight:800;color:#c8820a;border-top:2px solid #c8820a">'+fmtE(total)+'</td></tr>';
-
-  var isAngebot = docType==='Angebot';
-  var isAnzahlung = docType==='Anzahlungsrechnung';
-  var isRechnung = docType==='Rechnung';
-
-  // Compact body text font-size depending on doc type (Angebot has longer text)
-  var bodyFontSize = isAngebot ? '8.5px' : '9.5px';
-
-  return '<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">'
-    +'<meta name="viewport" content="width=device-width,initial-scale=1">'
-    +'<title>'+docType+' '+docNum+'</title>'
+      +'<tr><td colspan="3" style="text-align:right;padding:7px 8px;font-size:12px;font-weight:700;color:#c8820a;border-top:2px solid #c8820a">Restbetrag fällig</td><td style="text-align:right;padding:7px 8px;font-size:14px;font-weight:800;color:#c8820a;border-top:2px solid #c8820a">'+fmtE(restAmount)+'</td></tr>'
+    :'<tr><td colspan="3" style="text-align:right;padding:7px 8px;font-size:12px;font-weight:700;color:#c8820a;border-top:2px solid #c8820a">Summe</td><td style="text-align:right;padding:7px 8px;font-size:14px;font-weight:800;color:#c8820a;border-top:2px solid #c8820a">'+fmtE(total)+'</td></tr>';
+  var isAngebot=docType==="Angebot";
+  var PCSS="*{box-sizing:border-box;margin:0;padding:0}@page{size:A4;margin:12mm 15mm}html,body{width:210mm;font-family:Sora,Helvetica,Arial,sans-serif;font-size:10px;color:#1a1a1a;background:#fff}body{padding:12mm 15mm}@media print{.print-btn{display:none}body{padding:0}}";
+  function fmtDate(s){try{return s?new Date(s).toLocaleDateString("de-DE"):"--";}catch(e){return s||"--";}}
+  var fmtDate2=function(s){try{return s?new Date(s).toLocaleDateString("de-DE"):"--";}catch(e){return s||"--";}};
+  var recip='<div style="font-size:9px;color:#555;line-height:1.8"><strong style="color:#1a1a1a;font-size:9.5px">Empfänger:</strong><br>'+(b.clientName||"").replace(/\n/g,"<br>")+"<br>"+(b.clientAddr||"").replace(/\n/g,"<br>")+"<br>"+(b.clientEmail?b.clientEmail+"<br>":"")+(b.clientTel||"")+'</div>';
+  return '<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>'+docType+" "+docNum+'</title>'
     +'<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">'
-    +'<style>'
-    // Reset + base
-    +'*{box-sizing:border-box;margin:0;padding:0}'
-    +'html,body{width:210mm;min-height:297mm}'
-    +'body{font-family:"Sora",sans-serif;font-size:10px;color:#1a1a1a;background:#fff;padding:14mm 16mm 12mm 16mm}'
-    // Header
-    +'.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:2.5px solid #c8820a}'
-    +'.logo-wrap{display:flex;align-items:center;gap:10px}'
-    +'.logo-img{width:44px;height:44px;object-fit:contain}'
-    +'.logo-name{font-size:22px;font-weight:800;color:#1a1a1a;letter-spacing:-0.5px;line-height:1}'
-    +'.logo-sub{font-size:9px;color:#999;margin-top:2px}'
-    +'.sender{text-align:right;font-size:9px;color:#666;line-height:1.75}'
-    +'.sender strong{color:#1a1a1a;font-size:9.5px}'
-    // Orange top stripe
-    +'.stripe{background:#c8820a;height:5px;width:100%;margin-bottom:10px;border-radius:1px}'
-    // Recipients + doc info
-    +'.doc-block{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}'
-    +'.recip{font-size:9px;color:#555;line-height:1.8;min-width:180px}'
-    +'.recip strong{font-size:9.5px;color:#1a1a1a}'
-    +'.doc-info{text-align:right}'
-    +'.doc-title{font-size:18px;font-weight:800;color:#1a1a1a;margin-bottom:6px}'
-    // Meta table
-    +'.meta{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:9px}'
-    +'.meta td{padding:2px 0;vertical-align:top}'
-    +'.meta .ml{color:#999;white-space:nowrap;padding-right:8px}'
-    +'.meta .mv{font-weight:600;color:#1a1a1a}'
-    +'.meta-sep{border-top:1px solid #eee;margin-bottom:10px}'
-    // Body text
-    +'.body-text{font-size:'+bodyFontSize+';color:#444;line-height:1.65;margin-bottom:10px;padding:8px 10px;background:#fafafa;border-left:3px solid #c8820a;border-radius:0 3px 3px 0}'
-    +'.body-text strong{color:#c8820a}'
-    // Leistungstabelle
-    +'table.lt{width:100%;border-collapse:collapse;margin-bottom:4px}'
-    +'table.lt th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#c8820a;padding:5px 8px;border-bottom:2px solid #c8820a;text-align:left}'
-    +'table.lt th:nth-child(n+2){text-align:right}'
-    // Note
-    +'.note{font-size:8.5px;color:#aaa;font-style:italic;padding:3px 8px 8px;}'
-    // Legal
-    +'.legal-block{margin-top:8px}'
-    +'.legal{font-size:9px;color:#666;line-height:1.6;margin-bottom:3px}'
-    // Footer
-    +'.footer{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding-top:8px;border-top:2px solid #c8820a;font-size:8.5px;color:#999;line-height:1.85;margin-top:12px}'
-    +'.footer strong{color:#555}'
-    // Print button
-    +'.print-btn{position:fixed;bottom:18px;right:18px;padding:9px 18px;background:#c8820a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(200,130,10,.35)}'
-    +'@page{margin:10mm 14mm}@media print{'
-    +'.print-btn{display:none}'
-    +'body{padding:10mm 14mm 10mm 14mm}'
-    +'}'
-    +'</style></head><body>'
-
-    // Orange stripe top
-    +'<div class="stripe"></div>'
-
-    // Header: logo left, sender right
-    +'<div class="hdr">'
-      +'<div class="logo-wrap">'
-        +'<img class="logo-img" src="'+LOGO_DATA_URL+'" alt="Ofengugel Logo"/>'
-        +'<div><div class="logo-name">Ofengugel</div><div class="logo-sub">'+og.sub+'</div></div>'
-      +'</div>'
-      +'<div class="sender">'
-        +'<strong>'+og.name+'</strong><br>'
-        +og.owner+'<br>'
-        +og.street+'<br>'
-        +og.city+'<br><br>'
-        +og.email+'<br>'
-        +og.tel
-      +'</div>'
+    +'<style>'+PCSS+'</style></head><body>'
+    +'<div style="background:#c8820a;height:5px;width:100%;margin-bottom:10px;border-radius:1px"></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:2.5px solid #c8820a">'
+      +'<div style="display:flex;align-items:center;gap:10px"><img src="'+LOGO+'" style="width:44px;height:44px;object-fit:contain"/>'
+        +'<div><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px">Ofengugel</div><div style="font-size:9px;color:#999;margin-top:2px">'+og.sub+'</div></div></div>'
+      +'<div style="text-align:right;font-size:9px;color:#666;line-height:1.75"><strong style="color:#1a1a1a;font-size:9.5px">'+og.name+'</strong><br>'+og.owner+'<br>'+og.street+'<br>'+og.city+'<br><br>'+og.email+'<br>'+og.tel+'</div>'
     +'</div>'
-
-    // Recipient left, doc info right
-    +'<div class="doc-block">'
-      +'<div>'
-        +'<div class="recip"><strong>Empfänger:</strong><br>'
-          +(b.clientName||'').replace(/\n/g,'<br>')+'<br>'
-          +(b.clientAddr||'').replace(/\n/g,'<br>')+'<br>'
-          +(b.clientEmail?b.clientEmail+'<br>':'')
-          +(b.clientTel||'')
-        +'</div>'
-      +'</div>'
-      +'<div class="doc-info">'
-        +'<div class="doc-title">'+docType+'</div>'
-      +'</div>'
-    +'</div>'
-
-    // Meta grid
-    +'<table class="meta">'
-      +'<tr>'
-        +'<td class="ml">'+(isAngebot?'Angebotsnummer:':'Rechnungsnummer:')+'</td>'
-        +'<td class="mv">'+docNum+'</td>'
-        +'<td style="width:20px"></td>'
-        +'<td class="ml">'+(isAngebot?'Datum des Angebots:':'Rechnungsdatum:')+'</td>'
-        +'<td class="mv">'+docDate+'</td>'
-      +'</tr><tr>'
-        +'<td class="ml">Datum des Events:</td>'
-        +'<td class="mv">'+(b.date?new Date(b.date).toLocaleDateString('de-DE'):'–')+'</td>'
-        +'<td></td>'
-        +'<td class="ml">Anzahl Personen:</td>'
-        +'<td class="mv">'+(b.guests||'–')+'</td>'
-      +'</tr><tr>'
-        +'<td class="ml">Gebuchte Leistung:</td>'
-        +'<td class="mv">Gugel-Catering</td>'
-        +'<td></td>'
-        +'<td class="ml">Ort des Events:</td>'
-        +'<td class="mv">'+(b.location||'–')+'</td>'
-      +'</tr>'
+    +recip
+    +'<div style="font-size:20px;font-weight:800;margin-bottom:12px">'+docType+'</div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #ddd;font-size:9px">'
+      +'<tr><td style="color:#888;padding:2px 8px 2px 0;white-space:nowrap">'+( isAngebot?"Angebotsnummer:":"Rechnungsnummer:")+'</td><td style="font-weight:500">'+docNum+'</td><td style="width:20px"></td>'
+        +'<td style="color:#888;padding:2px 8px 2px 0;white-space:nowrap">'+( isAngebot?"Datum des Angebots:":"Rechnungsdatum:")+'</td><td style="font-weight:500">'+docDate+'</td></tr>'
+      +'<tr><td style="color:#888;padding:2px 8px 2px 0">Datum des Events:</td><td style="font-weight:500">'+fmtDate2(b.date)+'</td><td></td><td style="color:#888;padding:2px 8px 2px 0">Anzahl Personen:</td><td style="font-weight:500">'+( b.guests||"--")+'</td></tr>'
+      +'<tr><td style="color:#888;padding:2px 8px 2px 0">Gebuchte Leistung:</td><td style="font-weight:500">Gugel-Catering</td><td></td><td style="color:#888;padding:2px 8px 2px 0">Ort des Events:</td><td style="font-weight:500">'+( b.location||"--")+'</td></tr>'
     +'</table>'
-    +'<div class="meta-sep"></div>'
-
-    // Body text
-    +'<div class="body-text">'+bodyText+'</div>'
-
-    // Leistungstabelle
-    +'<table class="lt">'
-      +'<thead><tr>'
-        +'<th style="width:50%">Leistung</th>'
-        +'<th style="width:12%">Menge</th>'
-        +'<th style="width:18%">Stückpreis</th>'
-        +'<th style="width:20%">Gesamtpreis</th>'
-      +'</tr></thead>'
-      +'<tbody>'+rows+'</tbody>'
-      +'<tbody>'+sumRow+'</tbody>'
-    +'</table>'
-
-    // Note
-    +(note?'<div class="note">'+note+'</div>':'')
-
-    // Legal
-    +'<div class="legal-block">'
-      +(legal||'').split('\n\n').map(function(p){return '<div class="legal">'+p+'</div>';}).join('')
+    +'<div style="font-size:9.5px;color:#444;line-height:1.7;margin-bottom:14px;padding:9px 11px;background:#fafafa;border-left:3px solid #c8820a;border-radius:0 3px 3px 0">'+bodyText+'</div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:4px"><thead><tr>'
+      +'<th style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#c8820a;padding:5px 8px;border-bottom:2px solid #c8820a;text-align:left;width:50%">Leistung</th>'
+      +'<th style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#c8820a;padding:5px 8px;border-bottom:2px solid #c8820a;text-align:right;width:12%">Menge</th>'
+      +'<th style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#c8820a;padding:5px 8px;border-bottom:2px solid #c8820a;text-align:right;width:18%">Stückpreis</th>'
+      +'<th style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#c8820a;padding:5px 8px;border-bottom:2px solid #c8820a;text-align:right;width:20%">Gesamtpreis</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody><tbody>'+sumRow+'</tbody></table>'
+    +(note?'<div style="font-size:8.5px;color:#aaa;font-style:italic;padding:3px 8px 8px">'+note+'</div>':"")
+    +'<div style="margin-top:8px">'+(legal||"").split("\n\n").map(function(p){return '<div style="font-size:9px;color:#666;line-height:1.6;margin-bottom:3px">'+p+'</div>';}).join("")+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding-top:8px;border-top:2px solid #c8820a;font-size:8.5px;color:#999;line-height:1.85;margin-top:20px">'
+      +'<div><strong style="color:#555">'+og.name+'</strong><br>'+og.owner+'<br>'+og.street+'<br>'+og.city+'</div>'
+      +'<div><strong style="color:#555">'+og.bank+'</strong><br>Empfänger: '+og.bankRecipient+'<br>IBAN: '+og.iban+'<br>BIC: '+og.bic+'</div>'
     +'</div>'
-
-    // Footer
-    +'<div class="footer">'
-      +'<div><strong>'+og.name+'</strong><br>'+og.owner+'<br>'+og.street+'<br>'+og.city+'</div>'
-      +'<div><strong>'+og.bank+'</strong><br>Empfänger: '+og.bankRecipient+'<br>IBAN: '+og.iban+'<br>BIC: '+og.bic+'</div>'
-    +'</div>'
-
-    +'<button class="print-btn" onclick="printDoc()">🖨 Drucken / Als PDF speichern</button>'
-    +'<script>function printDoc(){var tip=document.getElementById(\'print-tip\');if(tip)tip.style.display=\'block\';setTimeout(function(){window.print();if(tip)tip.style.display=\'none\';},300);}<\/script>'
-    +'<div id="print-tip" style="display:none;position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:8px;font-size:12px;z-index:9999;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.4)">💡 Tipp: Im Druckdialog <strong>"Kopf- und Fußzeilen"</strong> deaktivieren für ein sauberes PDF</div>'
+    +'<script>function printDoc(){window.print();}<\/script>'
+    +'<button class="print-btn" onclick="printDoc()" style="position:fixed;bottom:18px;right:18px;padding:9px 18px;background:#c8820a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">\uD83D\uDDA8 Drucken / Als PDF speichern</button>'
     +'</body></html>';
 }
 
+function buildOfferExtraPages(b){
+  var og=getOG();
+  var LOGO="data:image/png;base64,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";
+  var PCSS="*{box-sizing:border-box;margin:0;padding:0}@page{size:A4;margin:12mm 15mm}html,body{width:210mm;font-family:Sora,Helvetica,Arial,sans-serif;font-size:10px;color:#1a1a1a;background:#fff}body{padding:12mm 15mm}@media print{.print-btn{display:none}body{padding:0}}";
+  function fmtDate(s){try{return s?new Date(s).toLocaleDateString("de-DE"):"--";}catch(e){return s||"--";}}
+  function hdr(title){
+    return '<div style="background:#c8820a;height:5px;width:100%;margin-bottom:10px;border-radius:1px"></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:2.5px solid #c8820a">'
+        +'<div style="display:flex;align-items:center;gap:10px"><img src="'+LOGO+'" style="width:44px;height:44px;object-fit:contain"/>'
+          +'<div><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px">Ofengugel</div><div style="font-size:9px;color:#999;margin-top:2px">'+og.sub+'</div></div></div>'
+        +'<div style="text-align:right;font-size:9px;color:#666;line-height:1.75"><strong style="color:#1a1a1a;font-size:9.5px">'+og.name+'</strong><br>'+og.owner+'<br>'+og.street+'<br>'+og.city+'<br><br>'+og.email+'<br>'+og.tel+'</div></div>'
+      +'<div style="font-size:20px;font-weight:800;margin-bottom:12px">'+title+'</div>'
+      +'<table style="width:100%;border-collapse:collapse;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #ddd;font-size:9px">'
+        +'<tr><td style="color:#888;padding:2px 8px 2px 0;white-space:nowrap">Rechnungsnummer:</td><td style="font-weight:500">'+b.offerNum+'</td><td style="width:20px"></td>'
+          +'<td style="color:#888;padding:2px 8px 2px 0;white-space:nowrap">Datum des Angebots:</td><td style="font-weight:500">'+new Date().toLocaleDateString("de-DE")+'</td></tr>'
+        +'<tr><td style="color:#888;padding:2px 8px 2px 0">Datum des Events:</td><td style="font-weight:500">'+fmtDate(b.date)+'</td><td></td>'
+          +'<td style="color:#888;padding:2px 8px 2px 0">Anzahl Personen:</td><td style="font-weight:500">'+( b.guests||"--")+'</td></tr>'
+        +'<tr><td style="color:#888;padding:2px 8px 2px 0">Gebuchte Leistung:</td><td style="font-weight:500">Gugel-Catering</td><td></td>'
+          +'<td style="color:#888;padding:2px 8px 2px 0">Ort des Events:</td><td style="font-weight:500">'+( b.location||"--")+'</td></tr>'
+      +'</table>';
+  }
+  function foot(){
+    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding-top:8px;border-top:2px solid #c8820a;font-size:8.5px;color:#999;line-height:1.85;margin-top:20px">'
+      +'<div><strong style="color:#555">'+og.name+'</strong><br>'+og.owner+'<br>'+og.street+'<br>'+og.city+'</div>'
+      +'<div><strong style="color:#555">'+og.bank+'</strong><br>Empfänger: '+og.bankRecipient+'<br>IBAN: '+og.iban+'<br>BIC: '+og.bic+'</div></div>';
+  }
+  function h2(t){return '<div style="font-size:11px;font-weight:700;color:#1a1a1a;margin:12px 0 3px">'+t+'</div>';}
+  function p(t){return '<div style="font-size:9.5px;color:#333;line-height:1.7;margin-bottom:4px">'+t+'</div>';}
+  function page(title,body){
+    return '<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>'+title+'</title>'
+      +'<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">'
+      +'<style>'+PCSS+'</style></head><body>'
+      +hdr(title)+body+foot()
+      +'<script>function printDoc(){window.print();}<\/script>'
+      +'<button class="print-btn" onclick="printDoc()" style="position:fixed;bottom:18px;right:18px;padding:9px 18px;background:#c8820a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">\uD83D\uDDA8 Drucken / Als PDF speichern</button>'
+      +'</body></html>';
+  }
+  var leistung=p("Der Leistungsumfang umfasst:")
+    +h2("Mobiles Catering")
+    +p("- 50 km An- und Abfahrt (ab dem 51. km wird zus\u00e4tzlich eine Kilometerpauschale auf der Rechnung ausgewiesen) - Ausgangspunkt: Calw<br>- Auf- und Abbau des Caterings<br>- Catering-Setup bestehend aus:<br>&nbsp;&nbsp;&nbsp;&nbsp;- 1\u20132 Gas\u00f6fen je nach Gr\u00f6\u00dfe der Veranstaltung inkl. Gas<br>&nbsp;&nbsp;&nbsp;&nbsp;- mindestens 1 Pizzab\u00e4cker je nach Gr\u00f6\u00dfe der Veranstaltung<br>&nbsp;&nbsp;&nbsp;&nbsp;- Pavillon bei Bedarf<br>&nbsp;&nbsp;&nbsp;&nbsp;- Servierbretter und Pizzaheber f\u00fcr Selbstbedienungsbuffet<br>&nbsp;&nbsp;&nbsp;&nbsp;- Einweggeschirr<br>&nbsp;&nbsp;&nbsp;&nbsp;- Backtische sowie erforderliche Ablagef\u00e4chen in Absprache mit dem Auftraggeber<br>&nbsp;&nbsp;&nbsp;&nbsp;- 3 Stunden Backzeit zzgl. Auf- und Abbauzeit<br>- Zubereitung von allen bestellten Pizzen inkl. der bestellten Zutaten (verbleibende Pizzen werden am Ende der Backzeit gebacken und in Pizzakartons an den Veranstalter ausgegeben) \u2013 die Anzahl der Pizzen ergibt sich aus dem 1,5-fachen der angegebenen Personenzahl. Abweichungen hiervon sind separat berechnet")
+    +h2("Gugel-Catering")
+    +p("- Alle Leistungen des Mobilen Caterings<br>- Zus\u00e4tzlich die Bereitstellung des \u201eGugel-Anh\u00e4ngers\u201c als Catering-Setup")
+    +h2("Pizza-Party")
+    +p("- 50 km An- und Abfahrt (ab dem 51. km wird zus\u00e4tzlich eine Kilometerpauschale auf der Rechnung ausgewiesen) - Ausgangspunkt: Calw<br>- Auf- und Abbau der \u00d6fen<br>- Setup bestehend aus:<br>&nbsp;&nbsp;&nbsp;&nbsp;- 1\u20132 Gas\u00f6fen je nach Gr\u00f6\u00dfe der Veranstaltung inkl. Gas<br>&nbsp;&nbsp;&nbsp;&nbsp;- mindestens 1 Pizzab\u00e4cker je nach Gr\u00f6\u00dfe der Veranstaltung<br>&nbsp;&nbsp;&nbsp;&nbsp;- Pavillon bei Bedarf<br>&nbsp;&nbsp;&nbsp;&nbsp;- Einweggeschirr<br>&nbsp;&nbsp;&nbsp;&nbsp;- 2 Stunden gemeinsame Backzeit zzgl. Auf- und Abbauzeit<br>- Zubereitung von allen bestellten Pizzen inkl. der bestellten Zutaten (verbleibende Pizzen werden am Ende der Backzeit gebacken und in Pizzakartons an den Veranstalter ausgegeben) \u2013 die Anzahl der Pizzen ergibt sich aus dem 1,5-fachen der angegebenen Personenzahl. Abweichungen hiervon sind separat berechnet");
+  var agb=h2("1) Geltungsbereich")
+    +p("Diese Gesch\u00e4ftsbedingungen gelten f\u00fcr alle Catering- und Veranstaltungsleistungen des Auftragnehmers.<br>Sie werden mit Zustandekommen des Vertrags verbindlicher Bestandteil des Vertrags.")
+    +h2("2) Vertragsschluss")
+    +p("Der Vertrag kommt ausschlie\u00dflich durch den fristgerechten Zahlungseingang des im Angebot genannten Anzahlungsbetrags zustande.<br>Mit Zahlung der Anzahlung erkennt der Kunde diese Buchungsbedingungen ausdr\u00fccklich an.<br>Mit Eingang der Anzahlung verpflichtet sich der Kunde zur Begleichung des verbleibenden Restbetrags sp\u00e4testens 14 Tage vor dem im Angebot genannten Veranstaltungstermin.")
+    +h2("3) Stornierungsbedingungen")
+    +p("Eine Stornierung ist ausschlie\u00dflich in Textform m\u00f6glich. Ma\u00dfgeblich f\u00fcr den Zeitpunkt der Stornierung ist der Eingang der Stornierungserkl\u00e4rung beim Auftragnehmer.<br>Es gelten folgende Stornierungsbedingungen:<br>- bis mehr als 14 Tage vor dem Veranstaltungstermin: 50\u00a0% des vereinbarten Gesamtbetrags<br>- 14 Tage oder weniger vor dem Veranstaltungstermin: 100\u00a0% des vereinbarten Gesamtbetrags")
+    +h2("4) R\u00fccktrittsrechte")
+    +p("Ein au\u00dferordentlicher R\u00fccktritt vom Vertrag ist, soweit gesetzlich zul\u00e4ssig, ausgeschlossen.<br>Dies gilt insbesondere bei: Krankheit des Kunden oder von G\u00e4sten, Schlechtwetter oder ung\u00fcnstigen Witterungsbedingungen, \u00c4nderungen der Teilnehmerzahl, pers\u00f6nlichen oder organisatorischen Gr\u00fcnden.")
+    +h2("5) Umbuchung")
+    +p("Eine Umbuchung auf einen anderen Veranstaltungstermin ist nur im gegenseitigen Einvernehmen m\u00f6glich.<br>F\u00fcr jede genehmigte Umbuchung wird eine Umbuchungspauschale in H\u00f6he von 200\u00a0\u20ac erhoben.<br>Wird kein geeigneter Alternativtermin gefunden oder vereinbart, erh\u00e4lt der Kunde einen Gutschein in H\u00f6he des urspr\u00fcnglich gebuchten Betrags abz\u00fcglich der Umbuchungspauschale.<br>Der Gutschein ist 12 Monate ab Ausstellungsdatum g\u00fcltig.<br>Eine Barauszahlung des Gutscheinwerts ist ausgeschlossen.")
+    +h2("6) Pflichten des Auftraggebers")
+    +p("Der Kunde stellt sicher, dass dem Auftragnehmer unentgeltlich und rechtzeitig alle f\u00fcr die Durchf\u00fchrung des Caterings erforderlichen Voraussetzungen zur Verf\u00fcgung stehen, insbesondere: Ausreichende Stromversorgung, geeignete Aufstell- und Arbeitsfl\u00e4chen, geeigneter Zugang zur Veranstaltungslocation, Nutzung von sanit\u00e4ren Anlagen (WC) f\u00fcr das Personal.<br>Bei mobilem Catering, Pizza-Partys oder Teambacken ohne \u201eGugel-Anh\u00e4nger\u201c sind geeignete Tische vom Auftraggeber bereitzustellen.<br>Sind diese Voraussetzungen nicht oder nicht rechtzeitig erf\u00fcllt, ist eine ordnungsgem\u00e4\u00dfe Leistungserbringung nicht m\u00f6glich. In diesem Fall bleibt der volle Verg\u00fctungsanspruch des Auftragnehmers bestehen.<br>Hinweis: Der Betrieb von Gas\u00f6fen ist ausschlie\u00dflich im Au\u00dfenbereich zul\u00e4ssig.")
+    +h2("7) Foto- und Filmrechte")
+    +p("Der Kunde gestattet dem Auftragnehmer, vor Ort Fotos der Location, der R\u00e4umlichkeiten sowie der Veranstaltung anzufertigen.<br>Diese d\u00fcrfen zeitlich und r\u00e4umlich unbegrenzt zu Werbe- und Referenzzwecken, insbesondere auf der Website und in sozialen Medien, verwendet werden.<br>Personen werden hierbei nur beiwerkartig oder unkenntlich dargestellt, sofern keine gesonderte Einwilligung vorliegt.")
+    +h2("8) Wirksamkeit")
+    +p("Sollten einzelne Bestimmungen dieser Buchungsbedingungen unwirksam sein oder werden, bleibt die Wirksamkeit der \u00fcbrigen Bestimmungen unber\u00fchrt.");
+  return {
+    leistung:page("Leistungsumfang",leistung),
+    agb:page("Gesch\u00e4ftsbedingungen",agb),
+    leistung_body: hdr("Leistungsumfang")+leistung+foot(),
+    agb_body: hdr("Gesch\u00e4ftsbedingungen")+agb+foot()
+  };
+}
 
-function openPrintWindow(html,filename){
-  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  // Primary: direct download (always works, no popup blocker issues)
-  const a=document.createElement('a');
-  a.href=url;
-  a.download=(filename||'Dokument')+'.html';
+
+function renderSettings(){
+  const og=getOG();
+  const fields={
+    'cfg-pauschale': (D.settings.prices||{}).pauschale ?? og.pauschale,
+    'cfg-price-per-person': (D.settings.prices||{}).pricePerPerson ?? og.pricePerPerson,
+    'cfg-km-rate': (D.settings.prices||{}).kmRate ?? og.kmRate,
+    'cfg-firm-name': og.name, 'cfg-firm-owner': og.owner,
+    'cfg-firm-street': og.street, 'cfg-firm-city': og.city,
+    'cfg-firm-email': og.email, 'cfg-firm-tel': og.tel,
+    'cfg-firm-sub': og.sub, 'cfg-bank-name': og.bank,
+    'cfg-bank-owner': og.bankRecipient, 'cfg-bank-iban': og.iban,
+    'cfg-bank-bic': og.bic
+  };
+  Object.keys(fields).forEach(function(id){
+    const el=document.getElementById(id);
+    if(el) el.value=fields[id]||'';
+  });
+  updateCfgPreview();
+  ['cfg-pauschale','cfg-price-per-person','cfg-km-rate'].forEach(function(id){
+    const el=document.getElementById(id);
+    if(el) el.removeEventListener('input',updateCfgPreview), el.addEventListener('input',updateCfgPreview);
+  });
+}
+
+function openPrintWindow(html, filename){
+  var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  // Always download first (works without popup permission)
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = (filename||'Dokument') + '.html';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  // Also try to open in new tab for immediate viewing
+  // Also try to open in new tab for immediate print
   setTimeout(function(){
-    window.open(url,'_blank');
-    setTimeout(function(){URL.revokeObjectURL(url);},30000);
-  },200);
-  showDownloadToast((filename||'Dokument')+'.html — Im Browser öffnen zum Drucken/PDF');
+    window.open(url, '_blank');
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 30000);
+  }, 300);
+  showDownloadToast((filename||'Dokument') + '.html');
 }
 
-// ================================================================
-//  BACKUP EXPORT
-// ================================================================
-function createBackup(){
-  const now=new Date();
-  const ts=now.toISOString().replace(/[:.]/g,'-').slice(0,19);
-  const KM_RATE_LOCAL=0.30;
-  const fmtEur=n=>(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' \u20ac';
-  const fmtDate=s=>{try{return s?new Date(s).toLocaleDateString('de-DE'):'--';}catch(e){return s||'--';}};
-  const fmtPct=n=>(n||0).toFixed(1)+' %';
-  const evRevL=ev=>(ev.incomes||[]).reduce((s,i)=>s+i.amount,0);
-  const evCostL=ev=>(ev.expenses||[]).reduce((s,e)=>s+e.amount,0);
-  const evKmL=ev=>(ev.km||[]).reduce((s,k)=>s+k.km,0);
-  const allEvents=D.events||[],allFix=D.fixkosten||[],allAssets=D.assets||[],allFahrten=D.fahrten||[];
-  const totalRev=allEvents.reduce((s,e)=>s+evRevL(e),0);
-  const totalCost=allEvents.reduce((s,e)=>s+evCostL(e),0);
-  const totalFixY=allFix.reduce((s,f)=>s+f.amount*12,0);
-  const totalKmAll=allEvents.reduce((s,e)=>s+evKmL(e),0)+allFahrten.reduce((s,f)=>s+f.km,0);
-  function thRow(){return '<tr>'+Array.from(arguments).map(function(c){return '<th style="background:#f5f6f8;padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;font-family:monospace;border-bottom:2px solid #e4e7ec">'+c+'</th>';}).join('')+'</tr>';}
-  function tdRow(){return '<tr>'+Array.from(arguments).map(function(v){return '<td style="padding:8px 12px;border-bottom:1px solid #e4e7ec;font-size:12px;vertical-align:top">'+(v==null?'--':v)+'</td>';}).join('')+'</tr>';}
-  function moneySpan(v,col){return '<span style="font-family:monospace;color:'+(col||'#dc2626')+'">'+fmtEur(v)+'</span>';}
-  function wrapTable(rows){return '<table style="width:100%;border-collapse:collapse;margin-bottom:24px">'+rows+'</table>';}
-  var evRows='';
-  allEvents.slice().sort(function(a,b){return (a.date||'')>(b.date||'')?1:-1;}).forEach(function(ev){
-    var rev=evRevL(ev),cost=evCostL(ev),profit=rev-cost,margin=rev>0?profit/rev*100:0,kmTot=evKmL(ev);
-    evRows+=tdRow('<strong>'+(ev.name||'')+'</strong>',fmtDate(ev.date),ev.type||'--',ev.location||'--',moneySpan(rev,'#2563eb'),moneySpan(cost,'#dc2626'),moneySpan(profit,profit>=0?'#16a34a':'#dc2626'),fmtPct(margin),kmTot?kmTot+' km':'--');
-    if((ev.incomes||[]).length) evRows+='<tr><td></td><td colspan="8" style="padding:4px 12px 4px 24px;background:#f0fdf4;font-size:11px;color:#16a34a"><strong>Einnahmen:</strong> '+ev.incomes.map(function(i){return i.cat+': '+fmtEur(i.amount);}).join(' · ')+'</td></tr>';
-    if((ev.expenses||[]).length) evRows+='<tr><td></td><td colspan="8" style="padding:4px 12px 4px 24px;background:#fef2f2;font-size:11px;color:#dc2626"><strong>Ausgaben:</strong> '+ev.expenses.map(function(e){return e.cat+(e.desc?' ('+e.desc+')':'')+': '+fmtEur(e.amount);}).join(' · ')+'</td></tr>';
-    if((ev.km||[]).length) evRows+='<tr><td></td><td colspan="8" style="padding:4px 12px 4px 24px;background:#f0fdfa;font-size:11px;color:#0d9488"><strong>Fahrten:</strong> '+(ev.km||[]).map(function(k){return (k.desc||'Fahrt')+': '+k.km+' km ('+fmtEur(k.km*KM_RATE_LOCAL)+')';}).join(' · ')+'</td></tr>';
-  });
-  var fixRows=allFix.map(function(f){return tdRow(f.name,f.cat||'--',moneySpan(f.amount),moneySpan(f.amount*12),f.start||'--',f.end||'laufend');}).join('');
-  var astRows=allAssets.map(function(a){var gwg=a.price<800,py=a.date?new Date(a.date).getFullYear():new Date().getFullYear(),age=new Date().getFullYear()-py,rest=gwg?0:Math.max(0,a.price-(a.price/a.life)*Math.min(age,a.life));return tdRow(a.name,a.cat||'--',fmtDate(a.date),moneySpan(a.price,'#2563eb'),gwg?'GWG Sofortabzug':'Lineare AfA ('+a.life+' J.)',gwg?'--':moneySpan(a.price/a.life),gwg?'--':moneySpan(rest,'#2563eb'));}).join('');
-  var allFahrtenRows=[];
-  allEvents.forEach(function(ev){(ev.km||[]).forEach(function(k){allFahrtenRows.push({desc:k.desc||'--',date:k.date||ev.date,kmVal:k.km,source:ev.name});});});
-  allFahrten.forEach(function(f){allFahrtenRows.push({desc:f.desc,date:f.date,kmVal:f.km,source:'Zusatzfahrt'});});
-  var fahrtRows=allFahrtenRows.map(function(f){return tdRow(f.desc,fmtDate(f.date),f.kmVal+' km',fmtEur(f.kmVal*KM_RATE_LOCAL),'<span style="color:#6b7280;font-size:11px">'+f.source+'</span>');}).join('');
-  var summaryCards=[['Gesamtumsatz',fmtEur(totalRev),'#2563eb'],['Gesamtkosten',fmtEur(totalCost),'#dc2626'],['Gewinn',fmtEur(totalRev-totalCost),totalRev-totalCost>=0?'#16a34a':'#dc2626'],['Fixkosten/Jahr',fmtEur(totalFixY),'#d97706'],['Gesamt km',totalKmAll+' km','#0d9488'],['Km-Pauschale',fmtEur(totalKmAll*KM_RATE_LOCAL),'#0d9488'],['Anzahl Events',String(allEvents.length),'#2563eb'],['Buchungen',String((D.bookings||[]).length),'#c8820a']].map(function(item){return '<div style="background:#fff;border:1px solid #e4e7ec;border-radius:10px;padding:14px 16px;min-width:140px"><div style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:1.5px;font-family:monospace">'+item[0]+'</div><div style="font-size:18px;font-weight:600;color:'+item[2]+';margin-top:4px;font-family:monospace">'+item[1]+'</div></div>';}).join('');
-  var html='<!DOCTYPE html>\n<html lang="de">\n<head>\n<meta charset="UTF-8">\n<title>CaterCalc Backup '+ts+'</title>\n<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap" rel="stylesheet">\n<style>\n*{box-sizing:border-box;margin:0;padding:0}\nbody{font-family:\'Sora\',sans-serif;background:#f5f6f8;color:#111827;margin:0;padding:32px}\nh2{font-size:14px;font-weight:700;margin:28px 0 12px;color:#374151}\n.cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:32px}\n@media print{body{padding:16px;background:#fff}.no-print{display:none}}\n</style>\n</head>\n<body>\n'
-    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px"><div><h1 style="font-size:24px;font-weight:700;margin-bottom:4px">🍽 CaterCalc – Backup</h1><div style="font-size:12px;color:#6b7280;margin-bottom:28px">Erstellt am '+now.toLocaleDateString('de-DE')+' um '+now.toLocaleTimeString('de-DE')+' · '+allEvents.length+' Events · '+allFix.length+' Fixkosten · '+allAssets.length+' Anschaffungen</div></div>'
-    +'<button class="no-print" onclick="window.print()" style="padding:9px 18px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-family:\'Sora\',sans-serif;font-size:13px;font-weight:600;cursor:pointer">🖨️ Drucken / PDF</button></div>'
-    +'<div class="cards">'+summaryCards+'</div>'
-    +'<h2>📋 Events ('+allEvents.length+')</h2>'+wrapTable(thRow('Event','Datum','Typ','Ort','Umsatz','Kosten','Gewinn','Marge','km')+evRows)
-    +'<h2>🔄 Fixkosten ('+allFix.length+')</h2>'+wrapTable(thRow('Bezeichnung','Kategorie','/Monat','/Jahr','Von','Bis')+fixRows)
-    +'<h2>📦 Anschaffungen ('+allAssets.length+')</h2>'+wrapTable(thRow('Bezeichnung','Kategorie','Kaufdatum','Kaufpreis','Behandlung','AfA/Jahr','Restwert')+astRows)
-    +'<h2>🚗 Fahrten ('+allFahrtenRows.length+' Einträge · '+totalKmAll+' km · '+fmtEur(totalKmAll*KM_RATE_LOCAL)+')</h2>'+wrapTable(thRow('Beschreibung','Datum','km','Pauschale','Quelle')+fahrtRows)
-    +'<div style="margin-top:32px;padding:14px 16px;background:#fff;border:1px solid #e4e7ec;border-radius:10px;font-size:11px;color:#9ca3af;text-align:center">CaterCalc Backup · Erstellt: '+now.toLocaleString('de-DE')+'</div>'
-    +'\n</body>\n</html>';
-  var blob=new Blob([html],{type:'text/html;charset=utf-8'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url; a.download='CaterCalc_Backup_'+ts+'.html';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(function(){URL.revokeObjectURL(url);},8000);
-  var btn=document.getElementById('backup-btn');
-  if(btn){ var orig=btn.textContent; btn.textContent='\u2705 Backup gespeichert!'; btn.style.color='var(--green)'; setTimeout(function(){btn.textContent=orig;btn.style.color='';},2500); }
-}
-
-// ================================================================
-//  DATA IMPORT
-// ================================================================
-function showImportStatus(type, msg){
-  var el = document.getElementById('import-status');
-  if(!el) return;
-  var styles = {
-    success: 'background:var(--glight);border:1px solid #bbf7d0;color:var(--green)',
-    error:   'background:var(--rlight);border:1px solid #fecaca;color:var(--red)',
-    info:    'background:var(--blight);border:1px solid var(--bmid);color:var(--blue)'
-  };
-  el.style.cssText = 'display:block;padding:10px 12px;border-radius:var(--r);font-size:12px;' + (styles[type]||styles.info);
-  el.textContent = msg;
-}
-
-function applyImportData(raw) {
-  var parsed;
-  try {
-    // Try direct JSON parse
-    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  } catch(e) {
-    throw new Error('Ungültiges JSON-Format: ' + e.message);
-  }
-
-  // Validate it looks like our data structure
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Unbekanntes Datenformat.');
-  }
-
-  // Support multiple localStorage key names from old versions
-  var data = parsed;
-
-  // Count what we're importing
-  var evCount  = (data.events    || []).length;
-  var fixCount = (data.fixkosten || []).length;
-  var astCount = (data.assets    || []).length;
-  var ftCount  = (data.fahrten   || []).length;
-  var bkCount  = (data.bookings  || []).length;
-
-  if (evCount + fixCount + astCount + ftCount + bkCount === 0) {
-    throw new Error('Keine Daten gefunden. Bitte prüfe ob der richtige Export eingefügt wurde.');
-  }
-
-  var confirmMsg = 'Folgende Daten werden importiert und zusammengefuehrt:\n'
-    + evCount + ' Events, ' + fixCount + ' Fixkosten, ' + astCount + ' Anschaffungen, '
-    + ftCount + ' Fahrten, ' + bkCount + ' Bookings.\nBereits vorhandene Eintraege bleiben erhalten. Fortfahren?';
-  if (!confirm(confirmMsg)) {
-    return false;
-  }
-
-  // MERGE: add new items, skip duplicates by id
-  function mergeArrays(existing, incoming) {
-    if (!incoming || !incoming.length) return existing;
-    var existingIds = new Set((existing || []).map(function(x){ return x.id; }));
-    var toAdd = incoming.filter(function(x){ return x.id && !existingIds.has(x.id); });
-    return (existing || []).concat(toAdd);
-  }
-
-  D.events    = mergeArrays(D.events,    data.events);
-  D.fixkosten = mergeArrays(D.fixkosten, data.fixkosten);
-  D.assets    = mergeArrays(D.assets,    data.assets);
-  D.fahrten   = mergeArrays(D.fahrten,   data.fahrten);
-  D.bookings  = mergeArrays(D.bookings,  data.bookings);
-
-  // Migrate: ensure required fields
-  D.events.forEach(function(ev){
-    if(!ev.km)       ev.km = [];
-    if(!ev.expenses) ev.expenses = [];
-    if(!ev.incomes)  ev.incomes = [];
-  });
-  D.bookings.forEach(function(b){
-    if(!b.invoices) b.invoices = [];
-    if(!b.status)   b.status = 'anfrage';
-  });
-
-  // Merge settings (keep current settings, only fill missing)
-  if (data.settings) {
-    Object.keys(data.settings).forEach(function(k){
-      if (D.settings[k] === undefined) D.settings[k] = data.settings[k];
-    });
-  }
-
-  saveAndSync();
-  return {evCount: evCount, fixCount: fixCount, astCount: astCount, ftCount: ftCount, bkCount: bkCount};
-}
-
-function importFromText() {
-  var text = (document.getElementById('import-json-text').value || '').trim();
-  if (!text) {
-    showImportStatus('error', 'Bitte JSON-Text einfügen.');
-    return;
-  }
-  try {
-    var result = applyImportData(text);
-    if (result === false) return;
-    showImportStatus('success',
-      '✅ Import erfolgreich! ' +
-      result.evCount + ' Events, ' +
-      result.fixCount + ' Fixkosten, ' +
-      result.astCount + ' Anschaffungen, ' +
-      result.ftCount + ' Fahrten, ' +
-      result.bkCount + ' Bookings importiert.'
-    );
-    document.getElementById('import-json-text').value = '';
-    renderDashboard();
-    renderEvents();
-  } catch(e) {
-    showImportStatus('error', '❌ Fehler: ' + e.message);
-  }
-}
-
-function handleImportFileInModal(input) {
-  var file = input.files[0];
-  if (!file) return;
-  showImportStatus('info', '⏳ Datei wird gelesen…');
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var raw = e.target.result;
-    try {
-      var data = extractDataFromFile(raw, file.name);
-      var result = applyImportData(data);
-      if (result === false) { showImportStatus('info', 'Import abgebrochen.'); return; }
-      showImportStatus('success',
-        '✅ Import erfolgreich! ' +
-        result.evCount + ' Events, ' +
-        result.fixCount + ' Fixkosten, ' +
-        result.astCount + ' Anschaffungen, ' +
-        result.ftCount + ' Fahrten importiert.'
-      );
-      renderDashboard(); renderEvents();
-    } catch(err) {
-      showImportStatus('error', '❌ ' + err.message);
-    }
-    input.value = '';
-  };
-  reader.readAsText(file);
-}
-
-// Also handle the sidebar file input (legacy)
-function handleImportFile(input) {
-  handleImportFileInModal(input);
-  openMo('import-modal');
-}
-
-function extractDataFromFile(raw, filename) {
-  // JSON file: parse directly
-  if (filename && filename.toLowerCase().endsWith('.json')) {
-    return JSON.parse(raw);
-  }
-
-  // HTML backup file: extract localStorage data embedded in it
-  // Our backup HTML files don't embed the raw data, but we can try
-  // to find a JSON blob in the content
-  var jsonMatch = raw.match(/\{"events":\s*\[/);
-  if (jsonMatch) {
-    // Find the full JSON object
-    var startIdx = raw.indexOf('{"events":');
-    if (startIdx < 0) startIdx = raw.indexOf('{ "events":');
-    if (startIdx >= 0) {
-      // Find matching closing brace
-      var depth = 0, i = startIdx;
-      while (i < raw.length) {
-        if (raw[i] === '{') depth++;
-        else if (raw[i] === '}') { depth--; if (depth === 0) { return JSON.parse(raw.slice(startIdx, i+1)); } }
-        i++;
-      }
-    }
-  }
-
-  // Try parsing the whole thing as JSON anyway
-  try { return JSON.parse(raw); } catch(e) {}
-
-  // Try to find catercalc data in localStorage key format within the HTML
-  var lsMatch = raw.match(/catercalc[_v\d]*["']?\s*:\s*["'](\{.+?\})['"]/s);
-  if (lsMatch) { return JSON.parse(lsMatch[1]); }
-
-  throw new Error('Keine gueltigen Daten gefunden. Verwende Option B: F12 Konsole oeffnen, eingeben: copy(localStorage.getItem("catercalc_v4")), und den kopierten Text im JSON-Feld einfuegen.');
-}
-
-// ================================================================
-//  SETTINGS PAGE
-// ================================================================
-function renderSettings(){
-  const og = getOG();
-  const p  = D.settings.prices || {};
-  const f  = D.settings.firm   || {};
-  const b  = D.settings.bank   || {};
-
-  // Prices
-  document.getElementById('cfg-pauschale').value        = og.pauschale;
-  document.getElementById('cfg-price-per-person').value = og.pricePerPerson;
-  document.getElementById('cfg-km-rate').value          = og.kmRate;
-
-  // Firm
-  document.getElementById('cfg-firm-name').value   = og.name;
-  document.getElementById('cfg-firm-owner').value  = og.owner;
-  document.getElementById('cfg-firm-street').value = og.street;
-  document.getElementById('cfg-firm-city').value   = og.city;
-  document.getElementById('cfg-firm-email').value  = og.email;
-  document.getElementById('cfg-firm-tel').value    = og.tel;
-  document.getElementById('cfg-firm-sub').value    = og.sub;
-
-  // Bank
-  document.getElementById('cfg-bank-name').value  = og.bank;
-  document.getElementById('cfg-bank-owner').value = og.bankRecipient;
-  document.getElementById('cfg-bank-iban').value  = og.iban;
-  document.getElementById('cfg-bank-bic').value   = og.bic;
-
-  updateCfgPreview();
-
-  // Live preview on price change
-  ['cfg-pauschale','cfg-price-per-person','cfg-km-rate'].forEach(function(id){
-    document.getElementById(id).addEventListener('input', updateCfgPreview);
-  });
-}
-
-function updateCfgPreview(){
-  const pauschale = parseFloat(document.getElementById('cfg-pauschale').value)||0;
-  const ppp       = parseFloat(document.getElementById('cfg-price-per-person').value)||0;
-  const kmRate    = parseFloat(document.getElementById('cfg-km-rate').value)||0;
-  const example50 = pauschale + 50*ppp + 80*kmRate; // example: 50 persons, 80 km
-  const el = document.getElementById('cfg-preview');
-  if(!el) return;
-  el.innerHTML =
-    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;min-width:130px">'
-    +'<div style="font-size:9px;color:var(--t4);font-family:monospace;text-transform:uppercase;letter-spacing:1px">Grundpauschale</div>'
-    +'<div style="font-size:16px;font-weight:700;color:var(--blue);font-family:monospace">'+eur(pauschale)+'</div>'
-    +'</div>'
-    +'<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;min-width:130px">'
-    +'<div style="font-size:9px;color:var(--t4);font-family:monospace;text-transform:uppercase;letter-spacing:1px">Pro Person</div>'
-    +'<div style="font-size:16px;font-weight:700;color:var(--blue);font-family:monospace">'+eur(ppp)+'</div>'
-    +'</div>'
-    +'<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;min-width:130px">'
-    +'<div style="font-size:9px;color:var(--t4);font-family:monospace;text-transform:uppercase;letter-spacing:1px">Pro km</div>'
-    +'<div style="font-size:16px;font-weight:700;color:var(--blue);font-family:monospace">'+eur(kmRate)+'</div>'
-    +'</div>'
-    +'<div style="background:var(--blight);border:1px solid var(--bmid);border-radius:var(--r);padding:8px 12px;min-width:160px">'
-    +'<div style="font-size:9px;color:var(--blue);font-family:monospace;text-transform:uppercase;letter-spacing:1px">Beispiel 50P / 80km</div>'
-    +'<div style="font-size:16px;font-weight:700;color:var(--blue);font-family:monospace">'+eur(example50)+'</div>'
-    +'</div>';
-}
-
-function saveSettings(){
-  // Read prices
-  D.settings.prices = {
-    pauschale:       parseFloat(document.getElementById('cfg-pauschale').value)        || OG_DEFAULTS.pauschale,
-    pricePerPerson:  parseFloat(document.getElementById('cfg-price-per-person').value) || OG_DEFAULTS.pricePerPerson,
-    kmRate:          parseFloat(document.getElementById('cfg-km-rate').value)          || OG_DEFAULTS.kmRate
-  };
-  // Read firm
-  D.settings.firm = {
-    name:   document.getElementById('cfg-firm-name').value.trim()   || OG_DEFAULTS.name,
-    sub:    document.getElementById('cfg-firm-sub').value.trim()    || OG_DEFAULTS.sub,
-    owner:  document.getElementById('cfg-firm-owner').value.trim()  || OG_DEFAULTS.owner,
-    street: document.getElementById('cfg-firm-street').value.trim() || OG_DEFAULTS.street,
-    city:   document.getElementById('cfg-firm-city').value.trim()   || OG_DEFAULTS.city,
-    email:  document.getElementById('cfg-firm-email').value.trim()  || OG_DEFAULTS.email,
-    tel:    document.getElementById('cfg-firm-tel').value.trim()    || OG_DEFAULTS.tel
-  };
-  // Read bank
-  D.settings.bank = {
-    name:  document.getElementById('cfg-bank-name').value.trim()  || OG_DEFAULTS.bank,
-    owner: document.getElementById('cfg-bank-owner').value.trim() || OG_DEFAULTS.bankRecipient,
-    iban:  document.getElementById('cfg-bank-iban').value.trim()  || OG_DEFAULTS.iban,
-    bic:   document.getElementById('cfg-bank-bic').value.trim()   || OG_DEFAULTS.bic
-  };
-  saveAndSync();
-  // Update booking price preview if it's open
-  if(document.getElementById('bm-guests').value) calcBookingPrice();
-  updateCfgPreview();
-  // Visual confirmation
-  const btn = document.querySelector('#page-settings .btn-primary');
-  if(btn){
-    const orig = btn.textContent;
-    btn.textContent = '✅ Gespeichert!';
-    btn.style.background = 'var(--green)';
-    setTimeout(function(){ btn.textContent=orig; btn.style.background=''; }, 2000);
-  }
-}
 
 // ================================================================
 //  INIT
 // ================================================================
 load();
 populateYearSelect();
-document.querySelectorAll('.mo').forEach(function(m){ m.addEventListener('click',function(e){ if(e.target===m) m.classList.remove('open'); }); });
+document.querySelectorAll('.mo').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});});
 renderDashboard();
-document.getElementById('sync-open-btn').addEventListener('click', openSyncModal);
-document.getElementById('backup-btn').addEventListener('click', createBackup);
-document.getElementById('import-btn').addEventListener('click', function(){ openMo('import-modal'); });
+document.getElementById('sync-open-btn').addEventListener('click',openSyncModal);
+document.getElementById('backup-btn').addEventListener('click',createBackup);
+document.getElementById('import-btn').addEventListener('click',function(){openMo('import-modal');});
 setBFilter('all');
-
-// Mobile sidebar toggle
 function toggleSidebar(){
   var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),btn=document.getElementById('menu-toggle');
   var isOpen=sb.classList.contains('mobile-open');
-  if(isOpen){ closeSidebar(); } else { sb.classList.add('mobile-open'); ov.classList.add('visible'); btn.classList.add('open'); }
+  if(isOpen){closeSidebar();}else{sb.classList.add('mobile-open');if(ov)ov.classList.add('visible');if(btn)btn.classList.add('open');}
 }
 function closeSidebar(){
   var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),btn=document.getElementById('menu-toggle');
-  sb.classList.remove('mobile-open'); ov.classList.remove('visible'); btn.classList.remove('open');
+  sb.classList.remove('mobile-open');if(ov)ov.classList.remove('visible');if(btn)btn.classList.remove('open');
 }
-document.querySelectorAll('.ni').forEach(function(n){ n.addEventListener('click',function(){ if(window.innerWidth<=768) closeSidebar(); }); });
-window.addEventListener('resize',function(){ if(window.innerWidth>768) closeSidebar(); });
-
+document.querySelectorAll('.ni').forEach(function(n){n.addEventListener('click',function(){if(window.innerWidth<=768)closeSidebar();});});
+window.addEventListener('resize',function(){if(window.innerWidth>768)closeSidebar();});
 autoLoadFromCloud();
 
 </script>
-
-<!-- Cloud Sync Modal -->
-<div class="mo" id="sync-modal">
-  <div class="modal" style="width:540px">
-    <div class="modal-title">☁ Cloud Sync – Supabase</div>
-    <div class="modal-sub">Daten werden automatisch mit Supabase synchronisiert.</div>
-    <div style="background:var(--glight);border:1px solid #bbf7d0;border-radius:var(--r);padding:13px 15px;margin-bottom:16px;font-size:12px;line-height:1.8;color:var(--green)">
-      <strong>✅ Verbunden:</strong> naakcmagdkblhfwawlrf.supabase.co<br>
-      <span style="color:var(--t3)">Alle Änderungen werden automatisch gespeichert.</span>
-    </div>
-    <input type="hidden" id="sb-url" value="https://naakcmagdkblhfwawlrf.supabase.co"/>
-    <input type="hidden" id="sb-key" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5hYWtjbWFnZGtibGhmd2F3bHJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDY2NTAsImV4cCI6MjA5MDI4MjY1MH0.hR8hpOcfwYb6lfFGz1RKN1_E-rWcOVXPAjAYar4Id5M"/>
-    <div id="sb-status" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:var(--r);font-size:12px"></div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <div style="border:1px solid var(--border);border-radius:var(--r);padding:14px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">🔄 Manueller Sync</div>
-        <div style="font-size:11px;color:var(--t4);margin-bottom:10px">Normalerweise passiert das automatisch bei jeder Änderung.</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="sbTest()">🔗 Verbindung testen</button>
-          <button class="btn btn-primary btn-sm" onclick="sbUpload().then(function(){sbShowStatus('success','✅ Hochgeladen!');})">⬆ Jetzt hochladen</button>
-          <button class="btn btn-ghost btn-sm" onclick="sbDownload().then(function(r){if(r){applyRemote(r.data);save();renderDashboard();sbShowStatus('success','✅ Heruntergeladen!');}})">⬇ Jetzt herunterladen</button>
-        </div>
-      </div>
-      <div style="border:1px solid #bbf7d0;border-radius:var(--r);padding:14px;background:var(--glight)">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--green)">🚀 Aus anderer Version laden</div>
-        <div style="font-size:11px;color:var(--green);margin-bottom:10px">Lädt alle Daten aus Supabase herunter und ersetzt die lokalen Daten. Nutze dies um Daten aus der alten Version zu übernehmen.</div>
-        <button class="btn btn-sm" id="sb-migrate-btn" style="background:var(--green);color:#fff" onclick="sbForceDownload()">⬇ Alle Daten aus Supabase laden</button>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeMo('sync-modal')">Schließen</button>
-    </div>
-  </div>
-</div>
-
-<!-- Import Modal -->
-<div class="mo" id="import-modal">
-  <div class="modal" style="width:580px">
-    <div class="modal-title">📥 Daten aus alter Version importieren</div>
-    <div class="modal-sub">Exportiere zuerst deine Daten aus der alten Version, dann importiere sie hier.</div>
-
-    <!-- Step 1: Export instructions -->
-    <div style="background:var(--blight);border:1px solid var(--bmid);border-radius:var(--r);padding:14px 16px;margin-bottom:16px">
-      <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:8px">Schritt 1 — Daten aus der alten Version exportieren</div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.8">
-        Öffne die <strong>alte Version</strong> des Tools im Browser und führe dort einen der folgenden Schritte durch:<br>
-        <strong>Option A (empfohlen):</strong> Klicke auf „💾 Backup erstellen" — lade die HTML-Datei herunter.<br>
-        <strong>Option B:</strong> Öffne die Browser-Konsole (F12 → Console), tippe:<br>
-        <code style="background:#e8f0fe;padding:2px 6px;border-radius:3px;font-family:monospace;font-size:11px">copy(localStorage.getItem('catercalc_v4') || localStorage.getItem('catercalc_v3') || localStorage.getItem('catercalc_v2'))</code><br>
-        Dann hier einfügen (Schritt 2).
-      </div>
-    </div>
-
-    <!-- Step 2: Import -->
-    <div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:8px">Schritt 2 — Daten hier importieren</div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <!-- File import -->
-      <div style="border:1px solid var(--border);border-radius:var(--r);padding:14px">
-        <div style="font-size:12px;font-weight:600;margin-bottom:6px">📁 Backup-Datei hochladen</div>
-        <div style="font-size:11px;color:var(--t4);margin-bottom:8px">Lade die Backup-HTML-Datei oder eine exportierte JSON-Datei hoch.</div>
-        <label class="btn btn-primary btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
-          📂 Datei auswählen
-          <input type="file" accept=".json,.html" style="display:none" onchange="handleImportFileInModal(this)"/>
-        </label>
-      </div>
-      <!-- Paste JSON -->
-      <div style="border:1px solid var(--border);border-radius:var(--r);padding:14px">
-        <div style="font-size:12px;font-weight:600;margin-bottom:6px">📋 JSON direkt einfügen</div>
-        <div style="font-size:11px;color:var(--t4);margin-bottom:8px">Füge den kopierten localStorage-Inhalt hier ein.</div>
-        <textarea id="import-json-text" rows="4" style="width:100%;font-family:monospace;font-size:11px" placeholder='{"events":[...],"fixkosten":[...],...}'></textarea>
-        <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="importFromText()">Importieren</button>
-      </div>
-    </div>
-
-    <div id="import-status" style="display:none;margin-top:12px;padding:10px 12px;border-radius:var(--r);font-size:12px"></div>
-
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeMo('import-modal')">Schließen</button>
-    </div>
-  </div>
-</div>
-
 </body>
 </html>
