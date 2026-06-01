@@ -2869,8 +2869,136 @@ function exportOfferPDF(bookingId){
     note:'Anmerkung: Die konkreten Pizzen aus den jeweiligen Kategorien werden bis spätestens 14 Tage vor dem Event besprochen.',
     legal:'Als Kleinunternehmer im Sinne des § 19 Abs. 1 UStG wird keine Umsatzsteuer ausgewiesen.\n\nBei Annahme des Angebots bitten wir um fristgerechte Bezahlung des genannten Betrags ohne Abzüge per Überweisung auf untenstehendes Konto.'
   });
-  openPrintWindow(html,'Angebot_'+b.offerNum);
+  // Build extra pages (Leistungsumfang + Geschäftsbedingungen)
+  var extraPages = buildOfferExtraPages(b);
+  // Combine into single printable HTML
+  var combinedHtml = html.replace('</body></html>', extraPages + '</body></html>');
+  openPrintWindow(combinedHtml,'Angebot_'+b.offerNum);
   setBookingStatus(bookingId,'angebot');
+}
+
+function buildOfferExtraPages(b){
+  var og = getOG();
+  var fmtDate = function(s){ try{ return s?new Date(s).toLocaleDateString('de-DE'):'–'; }catch(e){return s||'–';} };
+
+  // Shared header (same style as main offer)
+  function pageHeader(title){
+    return '<div style="page-break-before:always;padding:14mm 16mm 12mm 16mm;font-family:\'Sora\',Helvetica,Arial,sans-serif;font-size:10px;color:#1a1a1a;max-width:794px;margin:0 auto">'
+      // orange stripe
+      +'<div style="background:#c8820a;height:5px;width:100%;margin-bottom:10px;border-radius:1px"></div>'
+      // header
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:2.5px solid #c8820a">'
+        +'<div style="display:flex;align-items:center;gap:10px">'
+          +'<img src="'+LOGO_DATA_URL+'" style="width:44px;height:44px;object-fit:contain"/>'
+          +'<div><div style="font-size:22px;font-weight:800;letter-spacing:-0.5px">Ofengugel</div>'
+          +'<div style="font-size:9px;color:#999;margin-top:2px">'+og.sub+'</div></div>'
+        +'</div>'
+        +'<div style="text-align:right;font-size:9px;color:#666;line-height:1.75">'
+          +'<strong style="color:#1a1a1a;font-size:9.5px">'+og.name+'</strong><br>'
+          +og.owner+'<br>'+og.street+'<br>'+og.city+'<br><br>'+og.email+'<br>'+og.tel
+        +'</div>'
+      +'</div>'
+      // doc title
+      +'<div style="font-size:20px;font-weight:800;margin-bottom:12px">'+title+'</div>'
+      // meta grid
+      +'<table style="width:100%;border-collapse:collapse;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #ddd;font-size:9px">'
+        +'<tr>'
+          +'<td style="color:#888;padding:2px 0;padding-right:8px;white-space:nowrap">Rechnungsnummer:</td><td style="font-weight:500;color:#1a1a1a">'+b.offerNum+'</td>'
+          +'<td style="width:20px"></td>'
+          +'<td style="color:#888;padding:2px 0;padding-right:8px;white-space:nowrap">Datum des Angebots:</td><td style="font-weight:500;color:#1a1a1a">'+new Date().toLocaleDateString('de-DE')+'</td>'
+        +'</tr><tr>'
+          +'<td style="color:#888;padding:2px 0;padding-right:8px">Datum des Events:</td><td style="font-weight:500;color:#1a1a1a">'+fmtDate(b.date)+'</td>'
+          +'<td></td>'
+          +'<td style="color:#888;padding:2px 0;padding-right:8px">Anzahl Personen:</td><td style="font-weight:500;color:#1a1a1a">'+(b.guests||'–')+'</td>'
+        +'</tr><tr>'
+          +'<td style="color:#888;padding:2px 0;padding-right:8px">Gebuchte Leistung:</td><td style="font-weight:500;color:#1a1a1a">Gugel-Catering</td>'
+          +'<td></td>'
+          +'<td style="color:#888;padding:2px 0;padding-right:8px">Ort des Events:</td><td style="font-weight:500;color:#1a1a1a">'+(b.location||'–')+'</td>'
+        +'</tr>'
+      +'</table>';
+  }
+
+  function pageFooter(){
+    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding-top:8px;border-top:2px solid #c8820a;font-size:8.5px;color:#999;line-height:1.85;margin-top:auto">'
+      +'<div><strong style="color:#555">'+og.name+'</strong><br>'+og.owner+'<br>'+og.street+'<br>'+og.city+'</div>'
+      +'<div><strong style="color:#555">'+og.bank+'</strong><br>Empfänger: '+og.bankRecipient+'<br>IBAN: '+og.iban+'<br>BIC: '+og.bic+'</div>'
+      +'</div></div>';
+  }
+
+  function h2(txt){
+    return '<div style="font-size:11px;font-weight:700;color:#1a1a1a;margin:14px 0 3px">'+txt+'</div>';
+  }
+  function p(txt){
+    return '<div style="font-size:9.5px;color:#333;line-height:1.7;margin-bottom:4px">'+txt+'</div>';
+  }
+
+  // ── PAGE 2: Leistungsumfang ──────────────────────────────────────────────
+  var page2 = pageHeader('Leistungsumfang')
+    + p('Der Leistungsumfang umfasst:')
+    + h2('Mobiles Catering')
+    + p('- 50 km An- und Abfahrt (ab dem 51. km wird zusätzlich eine Kilometerpauschale auf der Rechnung ausgewiesen) - Ausgangspunkt: Calw<br>'
+      +'- Auf- und Abbau des Caterings<br>'
+      +'- Catering-Setup bestehend aus:<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- 1–2 Gasöfen je nach Größe der Veranstaltung inkl. Gas<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- mindestens 1 Pizzabäcker je nach Größe der Veranstaltung<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- Pavillon bei Bedarf<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- Servierbretter und Pizzaheber für Selbstbedienungsbuffet<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- Einweggeschirr<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- Backtische sowie erforderliche Ablageflächen in Absprache mit dem Auftraggeber<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- 3 Stunden Backzeit zzgl. Auf- und Abbauzeit<br>'
+      +'- Zubereitung von allen bestellten Pizzen inkl. der bestellten Zutaten (verbleibende Pizzen werden am Ende der Backzeit gebacken und in Pizzakartons an den Veranstalter ausgegeben) - die Anzahl der Pizzen ergibt sich aus dem 1,5-fachen der angegebenen Personenzahl. Abweichungen hiervon sind separat berechnet')
+    + h2('Gugel-Catering')
+    + p('- Alle Leistungen des Mobilen Caterings<br>'
+      +'- Zusätzlich die Bereitstellung des „Gugel-Anhängers“ als Catering-Setup')
+    + h2('Pizza-Party')
+    + p('- 50 km An- und Abfahrt (ab dem 51. km wird zusätzlich eine Kilometerpauschale auf der Rechnung ausgewiesen) - Ausgangspunkt: Calw<br>'
+      +'- Auf- und Abbau der Öfen<br>'
+      +'- Setup bestehend aus:<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- 1–2 Gasöfen je nach Größe der Veranstaltung inkl. Gas<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- mindestens 1 Pizzabäcker je nach Größe der Veranstaltung<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- Pavillon bei Bedarf<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- Einweggeschirr<br>'
+      +'&nbsp;&nbsp;&nbsp;&nbsp;- 2 Stunden gemeinsame Backzeit zzgl. Auf- und Abbauzeit<br>'
+      +'- Zubereitung von allen bestellten Pizzen inkl. der bestellten Zutaten (verbleibende Pizzen werden am Ende der Backzeit gebacken und in Pizzakartons an den Veranstalter ausgegeben) - die Anzahl der Pizzen ergibt sich aus dem 1,5-fachen der angegebenen Personenzahl. Abweichungen hiervon sind separat berechnet')
+    + pageFooter();
+
+  // ── PAGE 3: Geschäftsbedingungen ─────────────────────────────────────────
+  var page3 = pageHeader('Geschäftsbedingungen')
+    + h2('1) Geltungsbereich')
+    + p('Diese Geschäftsbedingungen gelten für alle Catering- und Veranstaltungsleistungen des Auftragnehmers.<br>'
+      +'Sie werden mit Zustandekommen des Vertrags verbindlicher Bestandteil des Vertrags.')
+    + h2('2) Vertragsschluss')
+    + p('Der Vertrag kommt ausschließlich durch den fristgerechten Zahlungseingang des im Angebot genannten Anzahlungsbetrags zustande.<br>'
+      +'Mit Zahlung der Anzahlung erkennt der Kunde diese Buchungsbedingungen ausdrücklich an.<br>'
+      +'Mit Eingang der Anzahlung verpflichtet sich der Kunde zur Begleichung des verbleibenden Restbetrags spätestens 14 Tage vor dem im Angebot genannten Veranstaltungstermin.')
+    + h2('3) Stornierungsbedingungen')
+    + p('Eine Stornierung ist ausschließlich in Textform möglich. Maßgeblich für den Zeitpunkt der Stornierung ist der Eingang der Stornierungserklärung beim Auftragnehmer.<br>'
+      +'Es gelten folgende Stornierungsbedingungen:<br>'
+      +'- bis mehr als 14 Tage vor dem Veranstaltungstermin: 50 % des vereinbarten Gesamtbetrags<br>'
+      +'- 14 Tage oder weniger vor dem Veranstaltungstermin: 100 % des vereinbarten Gesamtbetrags')
+    + h2('4) Rücktrittsrechte')
+    + p('Ein außerordentlicher Rücktritt vom Vertrag ist, soweit gesetzlich zulässig, ausgeschlossen.<br>'
+      +'Dies gilt insbesondere bei: Krankheit des Kunden oder von Gästen, Schlechtwetter oder ungünstigen Witterungsbedingungen, Änderungen der Teilnehmerzahl, persönlichen oder organisatorischen Gründen.')
+    + h2('5) Umbuchung')
+    + p('Eine Umbuchung auf einen anderen Veranstaltungstermin ist nur im gegenseitigen Einvernehmen möglich.<br>'
+      +'Für jede genehmigte Umbuchung wird eine Umbuchungspauschale in Höhe von 200 € erhoben.<br>'
+      +'Wird kein geeigneter Alternativtermin gefunden oder vereinbart, erhält der Kunde einen Gutschein in Höhe des ursprünglich gebuchten Betrags abzüglich der Umbuchungspauschale.<br>'
+      +'Der Gutschein ist 12 Monate ab Ausstellungsdatum gültig.<br>'
+      +'Eine Barauszahlung des Gutscheinwerts ist ausgeschlossen.')
+    + h2('6) Pflichten des Auftraggebers')
+    + p('Der Kunde stellt sicher, dass dem Auftragnehmer unentgeltlich und rechtzeitig alle für die Durchführung des Caterings erforderlichen Voraussetzungen zur Verfügung stehen, insbesondere: Ausreichende Stromversorgung, geeignete Aufstell- und Arbeitsflächen, geeigneter Zugang zur Veranstaltungslocation, Nutzung von sanitären Anlagen (WC) für das Personal.<br>'
+      +'Bei mobilem Catering, Pizza-Partys oder Teambacken ohne „Gugel-Anhänger“ sind geeignete Tische vom Auftraggeber bereitzustellen.<br>'
+      +'Sind diese Voraussetzungen nicht oder nicht rechtzeitig erfüllt, ist eine ordnungsgemäße Leistungserbringung nicht möglich. In diesem Fall bleibt der volle Vergütungsanspruch des Auftragnehmers bestehen.<br>'
+      +'Hinweis: Der Betrieb von Gasöfen ist ausschließlich im Außenbereich zulässig.')
+    + h2('7) Foto- und Filmrechte')
+    + p('Der Kunde gestattet dem Auftragnehmer, vor Ort Fotos der Location, der Räumlichkeiten sowie der Veranstaltung anzufertigen.<br>'
+      +'Diese dürfen zeitlich und räumlich unbegrenzt zu Werbe- und Referenzzwecken, insbesondere auf der Website und in sozialen Medien, verwendet werden.<br>'
+      +'Personen werden hierbei nur beiwerkartig oder unkenntlich dargestellt, sofern keine gesonderte Einwilligung vorliegt.')
+    + h2('8) Wirksamkeit')
+    + p('Sollten einzelne Bestimmungen dieser Buchungsbedingungen unwirksam sein oder werden, bleibt die Wirksamkeit der übrigen Bestimmungen unberührt.')
+    + pageFooter();
+
+  return page2 + page3;
 }
 
 function openDepositInvoice(bookingId){
@@ -3116,7 +3244,7 @@ function ogDocHTML(docType,b,opts){
     +'.footer strong{color:#555}'
     // Print button
     +'.print-btn{position:fixed;bottom:18px;right:18px;padding:9px 18px;background:#c8820a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(200,130,10,.35)}'
-    +'@media print{'
+    +'@page{margin:10mm 14mm}@media print{'
     +'.print-btn{display:none}'
     +'body{padding:10mm 14mm 10mm 14mm}'
     +'}'
@@ -3209,7 +3337,9 @@ function ogDocHTML(docType,b,opts){
       +'<div><strong>'+og.bank+'</strong><br>Empfänger: '+og.bankRecipient+'<br>IBAN: '+og.iban+'<br>BIC: '+og.bic+'</div>'
     +'</div>'
 
-    +'<button class="print-btn" onclick="window.print()">🖨 Drucken / Als PDF speichern</button>'
+    +'<button class="print-btn" onclick="printDoc()">🖨 Drucken / Als PDF speichern</button>'
+    +'<script>function printDoc(){var tip=document.getElementById(\'print-tip\');if(tip)tip.style.display=\'block\';setTimeout(function(){window.print();if(tip)tip.style.display=\'none\';},300);}<\/script>'
+    +'<div id="print-tip" style="display:none;position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:8px;font-size:12px;z-index:9999;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.4)">💡 Tipp: Im Druckdialog <strong>"Kopf- und Fußzeilen"</strong> deaktivieren für ein sauberes PDF</div>'
     +'</body></html>';
 }
 
